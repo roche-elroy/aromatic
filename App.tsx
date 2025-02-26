@@ -2,9 +2,9 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import HomeScreen from './components/home';
-import CameraScreen from './components/camera';
-import LocationScreen from './components/location';
+import HomeScreen from './components/home/home';
+import CameraScreen from './components/camera/camera';
+import LocationScreen from './components/location/location';
 
 const Tab = createBottomTabNavigator();
 
