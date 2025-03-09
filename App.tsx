@@ -1,4 +1,4 @@
-import { CameraPictureOptions, CameraView, useCameraPermissions } from "expo-camera";  
+import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";  
 import { useState, useEffect, useRef } from "react";  
 import { View, Text, Button, StyleSheet } from "react-native";  
 
@@ -7,10 +7,14 @@ const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
 export default function App() {  
   const [permission, requestPermission] = useCameraPermissions();  
   const [status, setStatus] = useState("🔄 Connecting...");  
-  
+  const [facing, setFacing] = useState<CameraType>("back");
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);  
+
+  function toggleCamera(){
+    setFacing(current => current === "back" ? "front" : "back");
+  }
 
   // 🌐 WebSocket Connection  
   const connectWebSocket = () => {  
@@ -93,9 +97,12 @@ export default function App() {
       <CameraView 
         ref={cameraRef} 
         style={styles.camera} 
-        facing="back" 
-        animateShutter={false}
-      />  
+        facing={facing} 
+        animateShutter={false}>
+          <View style={styles.buttonContainer}>
+            <Button title="Toggle Camera" onPress={toggleCamera} />
+          </View>
+      </CameraView>  
     </View>  
   );  
 }  
@@ -112,5 +119,12 @@ const styles = StyleSheet.create({
     top: 20, 
     left: 20 
   },  
+  buttonContainer: { 
+    position: "absolute", 
+    bottom: 40,
+    left: 0,
+    right: 0,
+    alignItems: "center"
+  },
   camera: StyleSheet.absoluteFillObject
 });
