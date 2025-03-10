@@ -31,3 +31,7 @@ This application demonstrates real-time object detection using React Native (Exp
     ```sh
    npm install
     ```
+Note:
+    In src\components\camera\Camera.tsx
+    replace with your actual IP address
+    const SERVER_IP = "192.168..";
