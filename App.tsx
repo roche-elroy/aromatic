@@ -3,10 +3,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import CameraScreen from './src/components/camera/Camera';
-// import SettingsScreen from '.src/components/settings/Settings';
+import SettingsScreen from './src/components/settings/Settings';
 import EmergencyScreen from './src/components/emergency/Emergency';
-// import LocationScreen from './src/components/location/Location';
-// import ProfileScreen from './src/components/profile/Profile';
+import LocationScreen from './src/components/location/Location';
+import ProfileScreen from './src/components/profile/Profile';
 
 const Tab = createBottomTabNavigator();
 
