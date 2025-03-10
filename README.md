@@ -26,4 +26,8 @@ This application demonstrates real-time object detection using React Native (Exp
     ```sh
     pip install -r backend/requirements.txt
     ```
-
+    
+4. Install the requied expo dependencies:
+    ```sh
+   npm install
+    ```
