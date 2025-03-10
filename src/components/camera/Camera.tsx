@@ -4,7 +4,7 @@ import { View, Text, Button, StyleSheet } from "react-native";
 
 const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
 
-export default function App() {  
+export default function CameraScreen() {  
   const [permission, requestPermission] = useCameraPermissions();  
   const [status, setStatus] = useState("🔄 Connecting...");  
   const [facing, setFacing] = useState<CameraType>("back");

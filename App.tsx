@@ -2,11 +2,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Camera from './src/components/camera/camera';
-// import SettingsScreen from './components/Settings';
-// import EmergencyScreen from './components/Emergency';
-// import LocationScreen from './components/Location';
-// import ProfileScreen from './components/Profile';
+import CameraScreen from './src/components/camera/Camera';
+// import SettingsScreen from '.src/components/settings/Settings';
+// import EmergencyScreen from '.src/components/emergency/Emergency';
+// import LocationScreen from './src/components/location/Location';
+// import ProfileScreen from './src/components/profile/Profile';
 
 const Tab = createBottomTabNavigator();
 
