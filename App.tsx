@@ -2,15 +2,18 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import CameraScreen from './src/components/camera/Camera';
 import SettingsScreen from './src/components/settings/Settings';
 import EmergencyScreen from './src/components/emergency/Emergency';
 import LocationScreen from './src/components/location/Location';
 import ProfileScreen from './src/components/profile/Profile';
+import "./src/lib/i18n";
 
 const Tab = createBottomTabNavigator();
 
 export default function App() {
+  const { t } = useTranslation();
   return (
     <NavigationContainer>
       <Tab.Navigator
@@ -51,27 +54,27 @@ export default function App() {
         <Tab.Screen 
           name="Settings" 
           component={SettingsScreen}
-          options={{ title: 'Settings' }}
+          options={{ title: t('navigation.settings') }}
         />
         <Tab.Screen 
           name="Emergency" 
           component={EmergencyScreen}
-          options={{ title: 'Emergency' }}
+          options={{ title: t('navigation.emergency') }}
         />
         <Tab.Screen 
           name="Camera" 
           component={CameraScreen}
-          options={{ title: 'Camera' }}
+          options={{ title: t('navigation.camera') }}
         />
         <Tab.Screen 
           name="Location" 
           component={LocationScreen}
-          options={{ title: 'Location' }}
+          options={{ title: t('navigation.location') }}
         />
         <Tab.Screen 
           name="Profile" 
           component={ProfileScreen}
-          options={{ title: 'Profile' }}
+          options={{ title: t('navigation.profile') }}
         />
       </Tab.Navigator>
     </NavigationContainer>
