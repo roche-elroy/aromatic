@@ -1,10 +1,12 @@
 import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";  
 import { useState, useEffect, useRef } from "react";  
-import { View, Text, Button, StyleSheet } from "react-native";  
+import { View, Text, Button, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";  
 
 const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
 
 export default function CameraScreen() {  
+  const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();  
   const [status, setStatus] = useState("🔄 Connecting...");  
   const [facing, setFacing] = useState<CameraType>("back");
@@ -102,6 +104,7 @@ export default function CameraScreen() {
           <View style={styles.buttonContainer}>
             <Button title="Toggle Camera" onPress={toggleCamera} />
           </View>
+        <Text style={styles.overlayText}>{t('camera.tapToScan')}</Text>
       </CameraView>  
     </View>  
   );  
@@ -125,6 +128,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center"
+  },
+  overlayText: {
+      fontSize: 10
   },
   camera: StyleSheet.absoluteFillObject
 });

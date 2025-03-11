@@ -1,0 +1,19 @@
+{
+    "navigation": {
+      "settings": "समायोजन",
+      "emergency": "आपातकालीन",
+      "camera": "कैमरा",
+      "location": "स्थान",
+      "profile": "प्रोफ़ाइल"
+    },
+    "camera": {
+      "processing": "टेक्स्ट को प्रोसेस किया जा रहा है...",
+      "noText": "कोई टेक्स्ट नहीं मिला",
+      "tapToScan": "टेक्स्ट स्कैन करने के लिए टैप करें"
+    },
+    "settings": {
+      "language": "भाषा",
+      "downloadPack": "ऑफलाइन पैक डाउनलोड करें",
+      "offlineReady": "ऑफलाइन उपयोग के लिए तैयार"
+    }
+  }
