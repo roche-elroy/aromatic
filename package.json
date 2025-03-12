@@ -1,26 +1,39 @@
 {
+  "name": "myapp",
+  "version": "1.0.0",
+  "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
     "web": "expo start --web"
   },
   "dependencies": {
-    "@types/react": "~18.3.12",
-    "eas-cli": "^15.0.11",
-    "expo": "^52.0.16",
-    "expo-camera": "~16.0.9",
-    "expo-image": "~2.0.3",
+    "@expo/metro-runtime": "~4.0.1",
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-navigation/bottom-tabs": "^7.2.1",
+    "@react-navigation/native": "^7.0.15",
+    "autoprefixer": "^10.4.20",
+    "expo": "~52.0.37",
+    "expo-camera": "~16.0.17",
+    "expo-file-system": "^18.0.11",
+    "expo-network": "~7.0.5",
+    "expo-status-bar": "~2.0.1",
+    "fastapi": "^0.0.8",
+    "i18next": "^24.2.2",
+    "postcss": "^8.5.3",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "react-i18next": "^15.4.1",
     "react-native": "0.76.7",
-    "react-native-web": "~0.19.6",
-    "typescript": "~5.3.3"
+    "react-native-vector-icons": "^10.2.0",
+    "react-native-web": "~0.19.13",
+    "tailwindcss": "^4.0.12"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.25.2",
+    "@types/react": "~18.3.12",
+    "typescript": "^5.3.3"
   },
-  "name": "camera",
-  "version": "1.0.0",
   "private": true
 }
