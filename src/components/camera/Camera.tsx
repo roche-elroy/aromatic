@@ -8,7 +8,7 @@ const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
 export default function CameraScreen() {  
   const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();  
-  const [status, setStatus] = useState("🔄 Connecting...");  
+  // const [status, setStatus] = useState("🔄 Connecting...");  
   const [facing, setFacing] = useState<CameraType>("back");
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
@@ -21,13 +21,13 @@ export default function CameraScreen() {
   // 🌐 WebSocket Connection  
   const connectWebSocket = () => {  
     console.log("🔄 Attempting WebSocket connection...");  
-    setStatus("🔄 Connecting...");  
+    // setStatus("🔄 Connecting...");  
 
     const ws = new WebSocket(`ws://${SERVER_IP}:8000/ws/video`);
 
     ws.onopen = () => {  
       console.log("✅ Connected to WebSocket");  
-      setStatus("✅ Connected to server");  
+      // setStatus("✅ Connected to server");  
       wsRef.current = ws;  
       isStreaming.current = true;  
       startStreaming();  
@@ -35,12 +35,12 @@ export default function CameraScreen() {
 
     ws.onerror = (error) => {  
       console.error("❌ WebSocket Error:", error);  
-      setStatus("❌ WebSocket error");  
+      // setStatus("❌ WebSocket error");  
     };  
 
     ws.onclose = (event) => {  
       console.warn("🔒 WebSocket closed:", event.reason);  
-      setStatus("🔒 Disconnected");  
+      // setStatus("🔒 Disconnected");  
       isStreaming.current = false;  
       wsRef.current = null;  
       setTimeout(connectWebSocket, 3000); // Retry after 3s  
@@ -95,7 +95,7 @@ export default function CameraScreen() {
 
   return (  
     <View style={styles.container}>  
-      <Text style={styles.status}>{status}</Text>  
+      {/* <Text style={styles.status}>{status}</Text>   */}
       <CameraView 
         ref={cameraRef} 
         style={styles.camera} 
@@ -104,7 +104,7 @@ export default function CameraScreen() {
           <View style={styles.buttonContainer}>
             <Button title="Toggle Camera" onPress={toggleCamera} />
           </View>
-        <Text style={styles.overlayText}>{t('camera.tapToScan')}</Text>
+        {/* <Text style={styles.overlayText}>{t('camera.tapToScan')}</Text> */}
       </CameraView>  
     </View>  
   );  
@@ -114,14 +114,14 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1 
   },
-  status: { 
-    fontSize: 16, 
-    marginTop: 50, 
-    color: "white", 
-    position: "absolute", 
-    top: 20, 
-    left: 20 
-  },  
+  // status: { 
+  //   fontSize: 16, 
+  //   marginTop: 50, 
+  //   color: "white", 
+  //   position: "absolute", 
+  //   top: 20, 
+  //   left: 20 
+  // },  
   buttonContainer: { 
     position: "absolute", 
     bottom: 40,
