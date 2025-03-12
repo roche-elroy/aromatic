@@ -6,6 +6,7 @@ import os
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
+from translation import translate_text
 
 app = FastAPI()
 
@@ -53,6 +54,8 @@ async def video_stream(websocket: WebSocket):
             detected_objects = [model.names[int(box.cls)] for box in results.boxes] if results.boxes else []
             detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
 
+            translated_text = await asyncio.to_thread(translate_text, detection_text)
+
             # Encode processed frame to JPEG
             _, buffer = cv2.imencode(".jpg", annotated_frame)
             base64_frame = base64.b64encode(buffer).decode()
@@ -60,9 +63,11 @@ async def video_stream(websocket: WebSocket):
             # Send processed frame and detection results to frontend
             response = {
                 "text": detection_text,
+                "translated text": translated_text,
                 "image": base64_frame
             }
             await websocket.send_json(response)
+            print(f"📤 Sending Response: {translated_text}")  # Add this line to see what is being sent
             print(f"📤 Processed frame sent back ({detection_text})")
 
     except Exception as e:

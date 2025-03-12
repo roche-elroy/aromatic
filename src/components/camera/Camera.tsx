@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { View, Text, Button, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";  
 
-const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
+const SERVER_IP = "192.168.1.7"; // Replace with your actual IP
 
 export default function CameraScreen() {  
   const { t } = useTranslation();
