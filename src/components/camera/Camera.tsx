@@ -1,12 +1,12 @@
 import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";  
 import { useState, useEffect, useRef } from "react";  
 import { View, Text, Button, StyleSheet } from "react-native";
-import { useTranslation } from "react-i18next";  
+import { useTranslation } from "../../context/TranslationContext";  
 
 const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
 
 export default function CameraScreen() {  
-  const { t } = useTranslation();
+  const { sourceLanguage, targetLanguage } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [detectionResult, setDetectionResult] = useState<string>("");  
@@ -25,7 +25,7 @@ export default function CameraScreen() {
     console.log("🔄 Attempting WebSocket connection...");  
     // setStatus("🔄 Connecting...");  
 
-    const ws = new WebSocket(`ws://${SERVER_IP}:8000/ws/video`);
+    const ws = new WebSocket(`ws://${SERVER_IP}:8000/ws/video?source=${sourceLanguage}&target=${targetLanguage}`);
 
     ws.onopen = () => {  
       console.log("✅ Connected to WebSocket");  

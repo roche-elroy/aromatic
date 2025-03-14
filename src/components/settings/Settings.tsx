@@ -1,86 +1,71 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { useTranslation } from 'react-i18next';
-import * as FileSystem from 'expo-file-system';
-import { TRANSLATION_CACHE_PATH } from "../../lib/i18n";
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { useTranslation } from '../../context/TranslationContext';
 
 export default function SettingsScreen() {
-  const { t, i18n } = useTranslation();
-  const [downloading, setDownloading] = useState(false);
-
-  const downloadTranslationPack = async (language: string) => {
-    setDownloading(true);
-    try {
-      const packPath = `${TRANSLATION_CACHE_PATH}${language}/`;
-      await FileSystem.makeDirectoryAsync(packPath, { intermediates: true });
-      // Simulate download - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      await FileSystem.writeAsStringAsync(
-        `${packPath}downloaded.json`,
-        JSON.stringify({ downloaded: true })
-      );
-    } catch (error) {
-      console.error('Download error:', error);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  const changeLanguage = async (language: string) => {
-    i18n.changeLanguage(language);
-  };
+  const { sourceLanguage, targetLanguage, setSourceLanguage, setTargetLanguage, supportedLanguages } = useTranslation();
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{t('settings.language')}</Text>
-      {downloading ? (
-        <ActivityIndicator size="large" color="#007AFF" />
-      ) : (
-        <View style={styles.languageButtons}>
-          <TouchableOpacity 
-            style={[styles.button, i18n.language === 'en' && styles.activeButton]}
-            onPress={() => changeLanguage('en')}
+    <ScrollView style={styles.container}>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Translation Settings</Text>
+        
+        <View style={styles.pickerContainer}>
+          <Text style={styles.label}>Translate from:</Text>
+          <Picker
+            selectedValue={sourceLanguage}
+            onValueChange={setSourceLanguage}
+            style={styles.picker}
           >
-            <Text style={styles.buttonText}>English</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.button, i18n.language === 'hi' && styles.activeButton]}
-            onPress={() => changeLanguage('hi')}
-          >
-            <Text style={styles.buttonText}>हिंदी</Text>
-          </TouchableOpacity>
+            {supportedLanguages.map((lang) => (
+              <Picker.Item key={lang.code} label={lang.name} value={lang.code} />
+            ))}
+          </Picker>
         </View>
-      )}
-    </View>
+
+        <View style={styles.pickerContainer}>
+          <Text style={styles.label}>Translate to:</Text>
+          <Picker
+            selectedValue={targetLanguage}
+            onValueChange={setTargetLanguage}
+            style={styles.picker}
+          >
+            {supportedLanguages.map((lang) => (
+              <Picker.Item key={lang.code} label={lang.name} value={lang.code} />
+            ))}
+          </Picker>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  languageButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  button: {
+  section: {
+    backgroundColor: '#fff',
+    margin: 10,
     padding: 15,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 8,
-    minWidth: 120,
-    alignItems: 'center',
+    borderRadius: 10,
   },
-  activeButton: {
-    backgroundColor: '#007AFF',
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
   },
-  buttonText: {
+  pickerContainer: {
+    marginBottom: 15,
+  },
+  label: {
     fontSize: 16,
-    color: '#000',
-  }
+    marginBottom: 5,
+  },
+  picker: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 5,
+  },
 });
