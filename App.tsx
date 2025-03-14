@@ -10,6 +10,10 @@ import LocationScreen from './src/components/location/Location';
 import ProfileScreen from './src/components/profile/Profile';
 import "./src/lib/i18n";
 
+//comment the below line to show errors
+import { LogBox } from 'react-native';
+LogBox.ignoreAllLogs(); //Ignore all log notifications
+
 const Tab = createBottomTabNavigator();
 
 export default function App() {
