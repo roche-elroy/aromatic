@@ -3,9 +3,10 @@ import numpy as np
 import asyncio
 import base64
 import os
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
+from translation import translate_text
 
 app = FastAPI()
 
@@ -53,23 +54,39 @@ async def video_stream(websocket: WebSocket):
             detected_objects = [model.names[int(box.cls)] for box in results.boxes] if results.boxes else []
             detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
 
+            # Translate the detected text
+            try:
+                translated_text = await asyncio.to_thread(translate_text, detection_text)
+                print(f"🔤 Original text: {detection_text}")
+                print(f"🔤 Translated text: {translated_text}")
+            except Exception as e:
+                print(f"⚠️ Translation error: {e}")
+                translated_text = detection_text
+
             # Encode processed frame to JPEG
             _, buffer = cv2.imencode(".jpg", annotated_frame)
             base64_frame = base64.b64encode(buffer).decode()
 
-            # Send processed frame and detection results to frontend
+            # Prepare response with both original and translated text
             response = {
                 "text": detection_text,
+                "translated_text": translated_text,
                 "image": base64_frame
             }
-            await websocket.send_json(response)
-            print(f"📤 Processed frame sent back ({detection_text})")
 
+            # Send the complete response
+            await websocket.send_json(response)
+            print(f"📤 Sent frame with detection: {detection_text}")
+            print(f"📤 Translation sent: {translated_text}")
+
+    except WebSocketDisconnect:
+        print("🔒 Client disconnected")
     except Exception as e:
         print(f"❌ Error: {e}")
+        raise  # Re-raise to see the full error trace
     finally:
         await websocket.close()
-        print("🔒 WebSocket closed")
+        print("🔒 WebSocket connection closed")
 
 @app.get("/")
 async def root():

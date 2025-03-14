@@ -7,7 +7,9 @@ const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
 
 export default function CameraScreen() {  
   const { t } = useTranslation();
-  const [permission, requestPermission] = useCameraPermissions();  
+  const [permission, requestPermission] = useCameraPermissions();
+  const [processedImage, setProcessedImage] = useState<string | null>(null);
+  const [detectionResult, setDetectionResult] = useState<string>("");  
   // const [status, setStatus] = useState("🔄 Connecting...");  
   const [facing, setFacing] = useState<CameraType>("back");
   const cameraRef = useRef<CameraView>(null);
@@ -36,7 +38,25 @@ export default function CameraScreen() {
     ws.onerror = (error) => {  
       console.error("❌ WebSocket Error:", error);  
       // setStatus("❌ WebSocket error");  
-    };  
+    }; 
+    
+    ws.onmessage = (event) => {
+      try {
+        const response = JSON.parse(event.data);
+        if (response.text) {
+          console.log("📥 Detection:", response.text);
+        }
+        if (response.translated_text) {
+          console.log("📥 Translation:", response.translated_text);
+          setDetectionResult(response.translated_text); // Show translated text
+        }
+        if (response.image) {
+          setProcessedImage(`data:image/jpeg;base64,${response.image}`);
+        }
+      } catch (error) {
+        console.error("⚠️ Error parsing WebSocket message:", error);
+      }
+    };
 
     ws.onclose = (event) => {  
       console.warn("🔒 WebSocket closed:", event.reason);  
@@ -134,3 +154,5 @@ const styles = StyleSheet.create({
   },
   camera: StyleSheet.absoluteFillObject
 });
+
+
