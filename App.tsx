@@ -95,10 +95,9 @@ const styles = StyleSheet.create({
     borderTopColor: '#e0e0e0',
   },
   header: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#000',
   },
   headerTitle: {
-    fontWeight: 'bold',
     fontSize: 18,
   }
 });
