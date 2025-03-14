@@ -1,4 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
+import { TranslationProvider } from './src/context/TranslationContext';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ const Tab = createBottomTabNavigator();
 export default function App() {
   const { t } = useTranslation();
   return (
+    <TranslationProvider>
     <NavigationContainer>
       <Tab.Navigator
         screenOptions={({ route }) => ({
@@ -82,6 +84,7 @@ export default function App() {
         />
       </Tab.Navigator>
     </NavigationContainer>
+    </TranslationProvider>
   );
 }
 
