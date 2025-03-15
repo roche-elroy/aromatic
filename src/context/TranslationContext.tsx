@@ -1,73 +1,32 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const SERVER_IP = "192.168.43.22";
+
 type Language = {
   code: string;
   name: string;
 };
-
-interface LanguageState {
-  source: string;
-  target: string;
-}
-
-interface TranslationContextType {
-  sourceLanguage: string;
-  targetLanguage: string;
-  setTargetLanguage: (lang: string) => Promise<void>;
-  supportedLanguages: Language[];
-  translateText: (text: string) => Promise<string>;
-}
 
 export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'en', name: 'English' },
   { code: 'hi', name: 'हिंदी' }
 ];
 
+interface TranslationContextType {
+  targetLanguage: string;
+  setTargetLanguage: (lang: string) => Promise<void>;
+  supportedLanguages: Language[];
+  translateText: (text: string) => Promise<string>;
+}
+
 const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
 
-const SERVER_IP = "192.168.43.22";
-
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
-  const [languages, setLanguages] = useState<LanguageState>({
-    source: 'en',
-    target: 'en'
-  });
-
-  useEffect(() => {
-    loadLanguagePreference();
-  }, []);
-
-  const loadLanguagePreference = async () => {
-    try {
-      const savedState = await AsyncStorage.getItem('languageState');
-      if (savedState) {
-        setLanguages(JSON.parse(savedState));
-      }
-    } catch (error) {
-      console.error('Error loading language preferences:', error);
-    }
-  };
-
-  const handleSetTargetLanguage = async (newTarget: string) => {
-    const oldTarget = languages.target;
-    setLanguages(prev => ({
-      source: prev.target, // Previous target becomes new source
-      target: newTarget
-    }));
-
-    try {
-      await AsyncStorage.setItem('languageState', JSON.stringify({
-        source: oldTarget,
-        target: newTarget
-      }));
-    } catch (error) {
-      console.error('Error saving language preferences:', error);
-    }
-  };
+  const [targetLanguage, setTargetLanguage] = useState('en');
 
   const translateText = async (text: string): Promise<string> => {
-    if (languages.source === languages.target) return text;
+    if (targetLanguage === 'en') return text;
 
     try {
       const response = await fetch(`http://${SERVER_IP}:8000/translate`, {
@@ -75,12 +34,11 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
-          source_lang: languages.source,
-          target_lang: languages.target
+          target_lang: targetLanguage
         })
       });
-      
-      if (!response.ok) throw new Error('Translation request failed');
+
+      if (!response.ok) throw new Error('Translation failed');
       
       const data = await response.json();
       return data.translated_text || text;
@@ -90,10 +48,30 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const handleSetTargetLanguage = async (lang: string) => {
+    try {
+      await AsyncStorage.setItem('targetLanguage', lang);
+      setTargetLanguage(lang);
+    } catch (error) {
+      console.error('Error saving language:', error);
+    }
+  };
+
+  useEffect(() => {
+    const loadLanguagePreference = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('targetLanguage');
+        if (saved) setTargetLanguage(saved);
+      } catch (error) {
+        console.error('Error loading language preference:', error);
+      }
+    };
+    loadLanguagePreference();
+  }, []);
+
   return (
     <TranslationContext.Provider value={{
-      sourceLanguage: languages.source,
-      targetLanguage: languages.target,
+      targetLanguage,
       setTargetLanguage: handleSetTargetLanguage,
       supportedLanguages: SUPPORTED_LANGUAGES,
       translateText

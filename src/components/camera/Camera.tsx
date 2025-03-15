@@ -6,7 +6,7 @@ import { useTranslation } from "../../context/TranslationContext";
 const SERVER_IP = "192.168.43.22";
 
 export default function CameraScreen() {  
-  const { sourceLanguage, targetLanguage } = useTranslation();
+  const { targetLanguage } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();  
   const [detectionResult, setDetectionResult] = useState<string>("");
   const [isConnected, setIsConnected] = useState(false);
@@ -34,9 +34,9 @@ export default function CameraScreen() {
       wsRef.current = null;
     }
 
-    console.log(`🔄 Connecting WebSocket (${sourceLanguage} -> ${targetLanguage})`);   
+    console.log(`🔄 Connecting WebSocket with language: ${targetLanguage}`);   
     const ws = new WebSocket(
-      `ws://${SERVER_IP}:8000/ws/video?source=${sourceLanguage}&target=${targetLanguage}`
+      `ws://${SERVER_IP}:8000/ws/video?target=${targetLanguage}`
     );
 
     ws.onopen = () => {  
