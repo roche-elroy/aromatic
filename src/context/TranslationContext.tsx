@@ -6,52 +6,41 @@ type Language = {
   name: string;
 };
 
-const SUPPORTED_LANGUAGES: Language[] = [
+const SERVER_IP = '192.168.43.22';
+
+export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'en', name: 'English' },
   { code: 'hi', name: 'Hindi' },
   { code: 'es', name: 'Spanish' },
   { code: 'fr', name: 'French' },
   { code: 'de', name: 'German' },
   { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'zh', name: 'Chinese' },
 ];
 
 interface TranslationContextType {
-  sourceLanguage: string;
   targetLanguage: string;
-  setSourceLanguage: (lang: string) => void;
   setTargetLanguage: (lang: string) => void;
   supportedLanguages: Language[];
+  translateText: (text: string) => Promise<string>;
+  reconnectWebSocket?: () => void;
 }
 
 const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
 
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
-  const [sourceLanguage, setSourceLanguage] = useState('en');
-  const [targetLanguage, setTargetLanguage] = useState('hi');
+  const [targetLanguage, setTargetLanguage] = useState('en');
+  const [wsReconnect, setWsReconnect] = useState<(() => void) | undefined>();
 
   useEffect(() => {
-    // Load saved language preferences
-    const loadLanguages = async () => {
-      try {
-        const savedSource = await AsyncStorage.getItem('sourceLanguage');
-        const savedTarget = await AsyncStorage.getItem('targetLanguage');
-        if (savedSource) setSourceLanguage(savedSource);
-        if (savedTarget) setTargetLanguage(savedTarget);
-      } catch (error) {
-        console.error('Error loading language preferences:', error);
-      }
-    };
-    loadLanguages();
+    loadLanguagePreference();
   }, []);
 
-  const handleSetSourceLanguage = async (lang: string) => {
-    setSourceLanguage(lang);
+  const loadLanguagePreference = async () => {
     try {
-      await AsyncStorage.setItem('sourceLanguage', lang);
+      const saved = await AsyncStorage.getItem('targetLanguage');
+      if (saved) setTargetLanguage(saved);
     } catch (error) {
-      console.error('Error saving source language:', error);
+      console.error('Error loading language preference:', error);
     }
   };
 
@@ -59,21 +48,46 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
     setTargetLanguage(lang);
     try {
       await AsyncStorage.setItem('targetLanguage', lang);
+      if (wsReconnect) {
+        wsReconnect();
+      }
     } catch (error) {
-      console.error('Error saving target language:', error);
+      console.error('Error saving language:', error);
     }
   };
 
+  const translateText = async (text: string): Promise<string> => {
+    if (targetLanguage === 'en') return text;
+    
+    try {
+      const response = await fetch(`http://${SERVER_IP}:8000/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          target_lang: targetLanguage
+        })
+      });
+      const data = await response.json();
+      return data.translated_text;
+    } catch (error) {
+      console.error('Translation error:', error);
+      return text;
+    }
+  };
+
+  const registerWebSocketReconnect = (callback: () => void) => {
+    setWsReconnect(() => callback);
+  };
+
   return (
-    <TranslationContext.Provider
-      value={{
-        sourceLanguage,
-        targetLanguage,
-        setSourceLanguage: handleSetSourceLanguage,
-        setTargetLanguage: handleSetTargetLanguage,
-        supportedLanguages: SUPPORTED_LANGUAGES,
-      }}
-    >
+    <TranslationContext.Provider value={{
+      targetLanguage,
+      setTargetLanguage: handleSetTargetLanguage,
+      supportedLanguages: SUPPORTED_LANGUAGES,
+      translateText,
+      reconnectWebSocket: wsReconnect
+    }}>
       {children}
     </TranslationContext.Provider>
   );
@@ -81,8 +95,9 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
 
 export const useTranslation = () => {
   const context = useContext(TranslationContext);
-  if (context === undefined) {
-    throw new Error('useTranslation must be used within a TranslationProvider');
+  if (!context) {
+    throw new Error('useTranslation must be used within TranslationProvider');
   }
   return context;
 };
+
