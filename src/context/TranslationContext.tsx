@@ -6,30 +6,33 @@ type Language = {
   name: string;
 };
 
-const SERVER_IP = '192.168.43.22';
+interface LanguageState {
+  source: string;
+  target: string;
+}
+
+interface TranslationContextType {
+  sourceLanguage: string;
+  targetLanguage: string;
+  setTargetLanguage: (lang: string) => Promise<void>;
+  supportedLanguages: Language[];
+  translateText: (text: string) => Promise<string>;
+}
 
 export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'en', name: 'English' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'ja', name: 'Japanese' },
+  { code: 'hi', name: 'हिंदी' }
 ];
-
-interface TranslationContextType {
-  targetLanguage: string;
-  setTargetLanguage: (lang: string) => void;
-  supportedLanguages: Language[];
-  translateText: (text: string) => Promise<string>;
-  reconnectWebSocket?: () => void;
-}
 
 const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
 
+const SERVER_IP = "192.168.43.22";
+
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
-  const [targetLanguage, setTargetLanguage] = useState('en');
-  const [wsReconnect, setWsReconnect] = useState<(() => void) | undefined>();
+  const [languages, setLanguages] = useState<LanguageState>({
+    source: 'en',
+    target: 'en'
+  });
 
   useEffect(() => {
     loadLanguagePreference();
@@ -37,56 +40,63 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
 
   const loadLanguagePreference = async () => {
     try {
-      const saved = await AsyncStorage.getItem('targetLanguage');
-      if (saved) setTargetLanguage(saved);
+      const savedState = await AsyncStorage.getItem('languageState');
+      if (savedState) {
+        setLanguages(JSON.parse(savedState));
+      }
     } catch (error) {
-      console.error('Error loading language preference:', error);
+      console.error('Error loading language preferences:', error);
     }
   };
 
-  const handleSetTargetLanguage = async (lang: string) => {
-    setTargetLanguage(lang);
+  const handleSetTargetLanguage = async (newTarget: string) => {
+    const oldTarget = languages.target;
+    setLanguages(prev => ({
+      source: prev.target, // Previous target becomes new source
+      target: newTarget
+    }));
+
     try {
-      await AsyncStorage.setItem('targetLanguage', lang);
-      if (wsReconnect) {
-        wsReconnect();
-      }
+      await AsyncStorage.setItem('languageState', JSON.stringify({
+        source: oldTarget,
+        target: newTarget
+      }));
     } catch (error) {
-      console.error('Error saving language:', error);
+      console.error('Error saving language preferences:', error);
     }
   };
 
   const translateText = async (text: string): Promise<string> => {
-    if (targetLanguage === 'en') return text;
-    
+    if (languages.source === languages.target) return text;
+
     try {
       const response = await fetch(`http://${SERVER_IP}:8000/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
-          target_lang: targetLanguage
+          source_lang: languages.source,
+          target_lang: languages.target
         })
       });
+      
+      if (!response.ok) throw new Error('Translation request failed');
+      
       const data = await response.json();
-      return data.translated_text;
+      return data.translated_text || text;
     } catch (error) {
       console.error('Translation error:', error);
       return text;
     }
   };
 
-  const registerWebSocketReconnect = (callback: () => void) => {
-    setWsReconnect(() => callback);
-  };
-
   return (
     <TranslationContext.Provider value={{
-      targetLanguage,
+      sourceLanguage: languages.source,
+      targetLanguage: languages.target,
       setTargetLanguage: handleSetTargetLanguage,
       supportedLanguages: SUPPORTED_LANGUAGES,
-      translateText,
-      reconnectWebSocket: wsReconnect
+      translateText
     }}>
       {children}
     </TranslationContext.Provider>
