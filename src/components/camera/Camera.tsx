@@ -3,33 +3,39 @@ import { useState, useEffect, useRef } from "react";
 import { View, Text, Button, StyleSheet } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";  
 
-const SERVER_IP = "192.168.43.22"; // Replace with your actual IP
+const SERVER_IP = "192.168.43.22";
 
 export default function CameraScreen() {  
-  const { sourceLanguage, targetLanguage } = useTranslation();
-  const [permission, requestPermission] = useCameraPermissions();
-  const [processedImage, setProcessedImage] = useState<string | null>(null);
-  const [detectionResult, setDetectionResult] = useState<string>("");  
-  // const [status, setStatus] = useState("🔄 Connecting...");  
+  const { targetLanguage, setTargetLanguage } = useTranslation();
+  const [permission, requestPermission] = useCameraPermissions();  
+  const [detectionResult, setDetectionResult] = useState<string>("");
   const [facing, setFacing] = useState<CameraType>("back");
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);  
 
-  function toggleCamera(){
+  function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
   }
 
-  // 🌐 WebSocket Connection  
-  const connectWebSocket = () => {  
-    console.log("🔄 Attempting WebSocket connection...");  
-    // setStatus("🔄 Connecting...");  
+  const reconnectWebSocket = () => {
+    console.log("🔄 Reconnecting WebSocket due to language change...");
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    connectWebSocket();
+  };
 
-    const ws = new WebSocket(`ws://${SERVER_IP}:8000/ws/video?source=${sourceLanguage}&target=${targetLanguage}`);
+  const connectWebSocket = () => {  
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.close();
+    }
+
+    console.log(`🔄 Connecting WebSocket with language: ${targetLanguage}`);   
+    const ws = new WebSocket(`ws://${SERVER_IP}:8000/ws/video?target=${targetLanguage}`);
 
     ws.onopen = () => {  
-      console.log("✅ Connected to WebSocket");  
-      // setStatus("✅ Connected to server");  
+      console.log(`✅ Connected to WebSocket (${targetLanguage})`);  
       wsRef.current = ws;  
       isStreaming.current = true;  
       startStreaming();  
@@ -37,39 +43,30 @@ export default function CameraScreen() {
 
     ws.onerror = (error) => {  
       console.error("❌ WebSocket Error:", error);  
-      // setStatus("❌ WebSocket error");  
-    }; 
-    
+    };  
+
     ws.onmessage = (event) => {
       try {
-        const response = JSON.parse(event.data);
-        if (response.text) {
-          console.log("📥 Detection:", response.text);
-        }
-        if (response.translated_text) {
-          console.log("📥 Translation:", response.translated_text);
-          setDetectionResult(response.translated_text); // Show translated text
-        }
-        if (response.image) {
-          setProcessedImage(`data:image/jpeg;base64,${response.image}`);
+        const result = JSON.parse(event.data);
+        if (result.translated_text) {
+          setDetectionResult(result.translated_text);
+          console.log(`📥 Received translation (${targetLanguage}):`, result.translated_text);
         }
       } catch (error) {
-        console.error("⚠️ Error parsing WebSocket message:", error);
+        console.error("⚠️ Parse Error:", error);
       }
     };
 
-    ws.onclose = (event) => {  
-      console.warn("🔒 WebSocket closed:", event.reason);  
-      // setStatus("🔒 Disconnected");  
+    ws.onclose = () => {  
+      console.log("🔒 WebSocket Closed");  
       isStreaming.current = false;  
       wsRef.current = null;  
-      setTimeout(connectWebSocket, 3000); // Retry after 3s  
+      setTimeout(connectWebSocket, 3000);
     };  
 
     wsRef.current = ws;  
   };  
 
-  // 📸 Frame Capture & Streaming  
   const startStreaming = async () => {  
     while (isStreaming.current) {  
       if (cameraRef.current && wsRef.current?.readyState === WebSocket.OPEN) {  
@@ -79,7 +76,7 @@ export default function CameraScreen() {
           const pictureOptions: CameraPictureOptions = {
             base64: true,
             quality: 0.5,
-            shutterSound: false, 
+            shutterSound: false,
           };
 
           const photo = await cameraRef.current.takePictureAsync(pictureOptions);  
@@ -94,20 +91,26 @@ export default function CameraScreen() {
       }
       await new Promise((resolve) => setTimeout(resolve, 200));
     }  
-};  
+  };  
 
   useEffect(() => {  
-    connectWebSocket();  
-    return () => {  
-      isStreaming.current = false;  
-      wsRef.current?.close();  
-    };  
-  }, []);  
+    setTargetLanguage(targetLanguage); // Register current language
+    console.log(`📢 Language changed to: ${targetLanguage}`);
+    connectWebSocket();
+    
+    return () => {
+      console.log('🔒 Cleaning up WebSocket connection');
+      isStreaming.current = false;
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [targetLanguage]);  
 
   if (!permission?.granted) {  
     return (  
       <View style={styles.container}>  
-        <Text>No access to camera</Text>  
+        <Text style={styles.message}>No access to camera</Text>  
         <Button title="Grant Permission" onPress={requestPermission} />  
       </View>  
     );  
@@ -115,16 +118,18 @@ export default function CameraScreen() {
 
   return (  
     <View style={styles.container}>  
-      {/* <Text style={styles.status}>{status}</Text>   */}
       <CameraView 
         ref={cameraRef} 
         style={styles.camera} 
-        facing={facing} 
-        animateShutter={false}>
-          <View style={styles.buttonContainer}>
-            <Button title="Toggle Camera" onPress={toggleCamera} />
-          </View>
-        {/* <Text style={styles.overlayText}>{t('camera.tapToScan')}</Text> */}
+        facing={facing}
+        animateShutter={false}
+      >
+        {detectionResult && (
+          <Text style={styles.detectionText}>{detectionResult}</Text>
+        )}
+        <View style={styles.buttonContainer}>
+          <Button title="Toggle Camera" onPress={toggleCamera} />
+        </View>
       </CameraView>  
     </View>  
   );  
@@ -132,27 +137,34 @@ export default function CameraScreen() {
 
 const styles = StyleSheet.create({  
   container: { 
-    flex: 1 
+    flex: 1,
+    backgroundColor: '#000',
   },
-  // status: { 
-  //   fontSize: 16, 
-  //   marginTop: 50, 
-  //   color: "white", 
-  //   position: "absolute", 
-  //   top: 20, 
-  //   left: 20 
-  // },  
+  camera: {
+    flex: 1,
+  },
   buttonContainer: { 
-    position: "absolute", 
-    bottom: 40,
-    left: 0,
-    right: 0,
-    alignItems: "center"
+    position: 'absolute',
+    bottom: 60,
+    width: '100%',
+    alignItems: 'center',
   },
-  overlayText: {
-      fontSize: 10
+  detectionText: {
+    color: '#fff',
+    fontSize: 18,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 5,
+    position: 'absolute',
+    bottom: 4,
+    left: 20,
+    right: 20,
+    textAlign: 'center',
   },
-  camera: StyleSheet.absoluteFillObject
+  message: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  }
 });
-
-
