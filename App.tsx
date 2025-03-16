@@ -52,19 +52,20 @@ function AppContent() {
   return (
     <NavigationContainer>
       <Tab.Navigator
+        initialRouteName="Camera"
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
             let iconName: keyof typeof Ionicons.glyphMap;
 
             switch (route.name) {
+              case 'Camera':
+                iconName = focused ? 'camera' : 'camera-outline';
+                break;
               case 'Settings':
                 iconName = focused ? 'settings' : 'settings-outline';
                 break;
               case 'Emergency':
                 iconName = focused ? 'warning' : 'warning-outline';
-                break;
-              case 'Camera':
-                iconName = focused ? 'camera' : 'camera-outline';
                 break;
               case 'Location':
                 iconName = focused ? 'location' : 'location-outline';
