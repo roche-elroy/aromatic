@@ -65,7 +65,7 @@ async def video_stream(websocket: WebSocket):
                 # Receive frame data with a timeout
                 data = await asyncio.wait_for(
                     websocket.receive_text(), 
-                    timeout=5.0
+                    timeout=10
                 )
                 
                 # Process image
