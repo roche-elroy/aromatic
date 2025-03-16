@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, Button, StyleSheet, TouchableOpacity } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";  
 import { useSpeech } from '../../hooks/useSpeech';
+import { Ionicons } from '@expo/vector-icons';
 
 const SERVER_IP = "192.168.43.22";
 
@@ -176,12 +177,18 @@ export default function CameraScreen() {
           {detectionResult && (
             <Text style={styles.detectionText}>{detectionResult}</Text>
           )}
-          <View style={styles.buttonContainer}>
-            <Button 
-              title={targetLanguage === 'hi' ? 'कैमरा टॉगल करें' : 'Toggle Camera'} 
-              onPress={toggleCamera} 
-            />
-          </View>
+            <View style={[styles.buttonContainer, { flexDirection: 'row', justifyContent: 'center' }]}>
+            <TouchableOpacity 
+              onPress={toggleCamera}
+              style={{
+              backgroundColor: 'rgba(0,0,0, 0.74)',
+              borderRadius: 50,
+              padding: 15,
+              }}
+            >
+              <Ionicons name="camera-reverse" size={30} color="white" />
+            </TouchableOpacity>
+            </View>
         </CameraView>
       </TouchableOpacity>
     </View>  
