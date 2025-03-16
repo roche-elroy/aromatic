@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, Button, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { useBiometricAuth } from '../../hooks/useBiometricAuth';
 import { useTranslation } from '../../context/TranslationContext';
+import { useSpeech } from '../../hooks/useSpeech';
+import { Ionicons } from '@expo/vector-icons';
 
 interface BiometricAuthProps {
   onAuthSuccess: () => void;
@@ -9,7 +11,8 @@ interface BiometricAuthProps {
 
 export const BiometricAuth: React.FC<BiometricAuthProps> = ({ onAuthSuccess }) => {
   const { isBiometricAvailable, authenticate } = useBiometricAuth();
-  const { translateText, targetLanguage } = useTranslation();
+  const { targetLanguage } = useTranslation();
+  const speakText = useSpeech();
 
   const handleAuth = async () => {
     const success = await authenticate();
@@ -18,30 +21,56 @@ export const BiometricAuth: React.FC<BiometricAuthProps> = ({ onAuthSuccess }) =
     }
   };
 
+  const authButtonText = targetLanguage === 'hi' 
+    ? 'फिंगरप्रिंट से लॉगिन करें' 
+    : 'Login with Fingerprint';
+
+  const welcomeText = targetLanguage === 'hi' 
+    ? 'वीजनमेट में आपका स्वागत है' 
+    : 'Welcome to VisionMate';
+
   if (!isBiometricAvailable) {
+    const warningText = targetLanguage === 'hi'
+      ? 'बायोमेट्रिक प्रमाणीकरण इस डिवाइस पर उपलब्ध नहीं है।'
+      : 'Biometric authentication is not available on this device.';
+
     return (
       <View style={styles.container}>
-        <Text style={styles.warning}>
-          {targetLanguage === 'hi' 
-            ? 'बायोमेट्रिक प्रमाणीकरण इस डिवाइस पर उपलब्ध नहीं है।'
-            : 'Biometric authentication is not available on this device.'}
-        </Text>
+        <TouchableOpacity
+          onPress={() => speakText(warningText)}
+          style={styles.warningContainer}
+        >
+          <Text style={styles.warning}>{warningText}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>
-        {targetLanguage === 'hi' ? 'वीजनमेट में आपका स्वागत है' : 'Welcome to VisionMate'}
-      </Text>
-      <Button 
-        title={targetLanguage === 'hi' ? 'फिंगरप्रिंट से लॉगिन करें' : 'Login with Fingerprint'} 
-        onPress={handleAuth} 
-      />
+      <TouchableOpacity
+        onPress={() => speakText(welcomeText)}
+        style={styles.titleContainer}
+      >
+        <Text style={styles.title}>{welcomeText}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.authButton}
+        onPress={() => {
+          speakText(authButtonText);
+          handleAuth();
+        }}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="finger-print" size={80} color="#fff" />
+        <Text style={styles.authButtonText}>{authButtonText}</Text>
+      </TouchableOpacity>
     </View>
   );
 };
+
+const { height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -50,20 +79,44 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
     zIndex: 999,
+    paddingTop: 80,
+  },
+  titleContainer: {
+    padding: 20,
   },
   title: {
-    fontSize: 24,
-    marginBottom: 20,
+    fontSize: 32,
     color: '#fff',
     textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  warningContainer: {
+    padding: 20,
   },
   warning: {
-    color: 'red',
+    color: '#ff4444',
     textAlign: 'center',
-    padding: 20,
+    fontSize: 20,
+  },
+  authButton: {
+    height: height * 0.5, // Takes up 50% of screen height
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    padding: 30,
+  },
+  authButtonText: {
+    color: '#fff',
+    fontSize: 26,
+    marginTop: 24,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
