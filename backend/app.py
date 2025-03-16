@@ -6,6 +6,7 @@ import os
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
+from depth import get_depth
 
 app = FastAPI()
 
@@ -53,6 +54,11 @@ async def video_stream(websocket: WebSocket):
             detected_objects = [model.names[int(box.cls)] for box in results.boxes] if results.boxes else []
             detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
 
+            # ✅ **Pass Frame to Depth Estimation**
+            depth_value = get_depth(frame)
+            if depth_value is not None:
+                detection_text += f" | Depth: {depth_value:.2f} cm"
+
             # Encode processed frame to JPEG
             _, buffer = cv2.imencode(".jpg", annotated_frame)
             base64_frame = base64.b64encode(buffer).decode()
@@ -60,7 +66,8 @@ async def video_stream(websocket: WebSocket):
             # Send processed frame and detection results to frontend
             response = {
                 "text": detection_text,
-                "image": base64_frame
+                "image": base64_frame,
+                "depth": depth_value  # Send depth info separately
             }
             await websocket.send_json(response)
             print(f"📤 Processed frame sent back ({detection_text})")
@@ -71,6 +78,16 @@ async def video_stream(websocket: WebSocket):
         await websocket.close()
         print("🔒 WebSocket closed")
 
+
+@app.get("/depth")
+async def get_depth_value():
+    """API endpoint to return the estimated depth in cm."""
+    distance = get_depth()
+    if distance is None:
+        return {"error": "Failed to capture depth"}
+    return {"estimated_distance_cm": distance}
+
 @app.get("/")
 async def root():
     return {"message": "Object Detection API is running. Connect to /ws/video for detection."}
+
