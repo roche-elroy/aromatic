@@ -1,14 +1,14 @@
 import { NavigationContainer } from '@react-navigation/native';
-import { TranslationProvider } from './src/context/TranslationContext';
+import { TranslationProvider, useTranslation } from './src/context/TranslationContext';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
 import CameraScreen from './src/components/camera/Camera';
 import SettingsScreen from './src/components/settings/Settings';
 import EmergencyScreen from './src/components/emergency/Emergency';
 import LocationScreen from './src/components/location/Location';
 import ProfileScreen from './src/components/profile/Profile';
+import { useEffect, useState } from 'react';
 import "./src/lib/i18n";
 
 //comment the below line to show errors
@@ -17,10 +17,32 @@ LogBox.ignoreAllLogs(); //Ignore all log notifications
 
 const Tab = createBottomTabNavigator();
 
-export default function App() {
-  const { t } = useTranslation();
+function AppContent() {
+  const { translateText, targetLanguage } = useTranslation();
+  const [translations, setTranslations] = useState({
+    settings: 'Settings',
+    emergency: 'Emergency',
+    camera: 'Camera',
+    location: 'Location',
+    profile: 'Profile'
+  });
+
+  useEffect(() => {
+    const translateLabels = async () => {
+      const translated = {
+        settings: await translateText('Settings'),
+        emergency: await translateText('Emergency'),
+        camera: await translateText('Camera'),
+        location: await translateText('Location'),
+        profile: await translateText('Profile')
+      };
+      setTranslations(translated);
+    };
+
+    translateLabels();
+  }, [targetLanguage, translateText]);
+
   return (
-    <TranslationProvider>
     <NavigationContainer>
       <Tab.Navigator
         screenOptions={({ route }) => ({
@@ -60,30 +82,37 @@ export default function App() {
         <Tab.Screen 
           name="Settings" 
           component={SettingsScreen}
-          options={{ title: t('navigation.settings') }}
+          options={{ title: translations.settings }}
         />
         <Tab.Screen 
           name="Emergency" 
           component={EmergencyScreen}
-          options={{ title: t('navigation.emergency') }}
+          options={{ title: translations.emergency }}
         />
         <Tab.Screen 
           name="Camera" 
           component={CameraScreen}
-          options={{ title: t('navigation.camera') }}
+          options={{ title: translations.camera }}
         />
         <Tab.Screen 
           name="Location" 
           component={LocationScreen}
-          options={{ title: t('navigation.location') }}
+          options={{ title: translations.location }}
         />
         <Tab.Screen 
           name="Profile" 
           component={ProfileScreen}
-          options={{ title: t('navigation.profile') }}
+          options={{ title: translations.profile }}
         />
       </Tab.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <TranslationProvider>
+      <AppContent />
     </TranslationProvider>
   );
 }
