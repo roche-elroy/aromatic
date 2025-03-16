@@ -1,5 +1,5 @@
 import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";  
-import { useState, useEffect, useRef } from "react";  
+import { useState, useEffect, useRef, useCallback } from "react";  
 import { View, Text, Button, StyleSheet } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";  
 
@@ -15,42 +15,69 @@ export default function CameraScreen() {
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
+  const connectionAttemptRef = useRef<number>(0);
 
   function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
   }
 
-  const connectWebSocket = () => {  
-    // Clear any existing timeouts
+  // Close existing WebSocket connection
+  const closeWebSocket = useCallback(() => {
+    console.log("🔄 Cleaning up existing connection");
+    isStreaming.current = false;
+    
+    if (wsRef.current) {
+      // Only close if not already closing/closed
+      if (wsRef.current.readyState === WebSocket.OPEN || 
+          wsRef.current.readyState === WebSocket.CONNECTING) {
+        try {
+          wsRef.current.close();
+        } catch (error) {
+          console.error("❌ Error closing WebSocket:", error);
+        }
+      }
+      wsRef.current = null;
+    }
+    
+    // Clear any pending reconnection
     if (reconnectTimeout.current) {
       clearTimeout(reconnectTimeout.current);
       reconnectTimeout.current = null;
     }
+  }, []);
 
-    // Close existing connection
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      isStreaming.current = false;
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+  const connectWebSocket = useCallback(() => {
+    // Prevent multiple simultaneous connection attempts
+    connectionAttemptRef.current += 1;
+    const currentAttempt = connectionAttemptRef.current;
+    
+    // Clean up existing connection
+    closeWebSocket();
+    
+    console.log(`🔄 Connecting WebSocket with language: ${targetLanguage}`);
+    setIsConnected(false);
+    
+    const ws = new WebSocket(`ws://${SERVER_IP}:8000/ws/video?target=${targetLanguage}`);
 
-    console.log(`🔄 Connecting WebSocket with language: ${targetLanguage}`);   
-    const ws = new WebSocket(
-      `ws://${SERVER_IP}:8000/ws/video?target=${targetLanguage}`
-    );
-
-    ws.onopen = () => {  
-      console.log(`✅ Connected to WebSocket (${targetLanguage})`);  
-      wsRef.current = ws;  
+    ws.onopen = () => {
+      // Ensure this is still the most recent connection attempt
+      if (currentAttempt !== connectionAttemptRef.current) {
+        console.log("⚠️ Outdated connection attempt, closing");
+        ws.close();
+        return;
+      }
+      
+      console.log(`✅ Connected to WebSocket (${targetLanguage})`);
+      wsRef.current = ws;
       isStreaming.current = true;
       setIsConnected(true);
-      startStreaming();  
-    };  
+      startStreaming();
+    };
 
-    ws.onerror = (error) => {  
+    ws.onerror = (error) => {
       console.error("❌ WebSocket Error:", error);
       setIsConnected(false);
-    };  
+    };
 
     ws.onmessage = (event) => {
       try {
@@ -63,56 +90,53 @@ export default function CameraScreen() {
       }
     };
 
-    ws.onclose = () => {  
-      console.log("🔒 WebSocket Closed");  
-      isStreaming.current = false;  
+    ws.onclose = (event) => {
+      console.log(`🔒 WebSocket Closed (${event.code}): ${event.reason || 'No reason provided'}`);
+      isStreaming.current = false;
       wsRef.current = null;
       setIsConnected(false);
       
-      // Attempt reconnection after 1 second
-      reconnectTimeout.current = setTimeout(connectWebSocket, 1000);
-    };  
-  };  
-
-  const startStreaming = async () => {  
-    while (isStreaming.current) {  
-      if (cameraRef.current && wsRef.current?.readyState === WebSocket.OPEN) {  
-        try {  
-          const pictureOptions: CameraPictureOptions = {
-            base64: true,
-            quality: 0.5,
-            shutterSound: false,
-          };
-
-          const photo = await cameraRef.current.takePictureAsync(pictureOptions);  
-
-          if (photo?.base64 && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(photo.base64);
-          }
-        } catch (err) {  
-          console.error("🚫 Frame capture error:", err);  
-        }  
+      // Only attempt reconnect if this is the most recent connection
+      if (currentAttempt === connectionAttemptRef.current) {
+        reconnectTimeout.current = setTimeout(connectWebSocket, 2000);
       }
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }  
-  };  
+    };
+  }, [targetLanguage, closeWebSocket]);
 
-  // Handle language changes
+  const startStreaming = async () => {
+    while (isStreaming.current && wsRef.current?.readyState === WebSocket.OPEN) {
+      try {
+        if (!cameraRef.current) continue;
+
+        const pictureOptions: CameraPictureOptions = {
+          base64: true,
+          quality: 0.5,
+          shutterSound: false,
+        };
+
+        const photo = await cameraRef.current.takePictureAsync(pictureOptions);
+
+        // Double-check connection is still valid
+        if (isStreaming.current && wsRef.current?.readyState === WebSocket.OPEN && photo?.base64) {
+          wsRef.current.send(photo.base64);
+        }
+      } catch (err) {
+        console.error("🚫 Frame capture error:", err);
+      }
+      
+      // Wait before capturing next frame
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  };
+
+  // Handle language changes with a clean disconnect/reconnect
   useEffect(() => {
     console.log(`📢 Language changed to: ${targetLanguage}`);
     connectWebSocket();
     
-    return () => {
-      console.log('🔒 Cleaning up WebSocket connection');
-      isStreaming.current = false;
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
-      }
-    };
-  }, [targetLanguage]);
+    // Cleanup function
+    return closeWebSocket;
+  }, [targetLanguage, connectWebSocket, closeWebSocket]);
 
   if (!permission?.granted) {  
     return (  
@@ -132,13 +156,18 @@ export default function CameraScreen() {
         animateShutter={false}
       >
         {!isConnected && (
-          <Text style={styles.connectionStatus}>Reconnecting...</Text>
+          <Text style={styles.connectionStatus}>
+            {targetLanguage === 'hi' ? 'पुन: कनेक्ट हो रहा है...' : 'Reconnecting...'}
+          </Text>
         )}
         {detectionResult && (
           <Text style={styles.detectionText}>{detectionResult}</Text>
         )}
         <View style={styles.buttonContainer}>
-          <Button title="Toggle Camera" onPress={toggleCamera} />
+          <Button 
+            title={targetLanguage === 'hi' ? 'कैमरा टॉगल करें' : 'Toggle Camera'} 
+            onPress={toggleCamera} 
+          />
         </View>
       </CameraView>  
     </View>  

@@ -22,11 +22,32 @@ interface TranslationContextType {
 
 const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
 
+const getStoredLanguage = async (): Promise<string> => {
+  try {
+    const lang = await AsyncStorage.getItem('targetLanguage');
+    return lang || 'en';
+  } catch {
+    return 'en';
+  }
+};
+
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
-  const [targetLanguage, setTargetLanguage] = useState('en');
+  const [targetLanguage, setTargetLanguage] = useState<string>('en');
+  const [isChanging, setIsChanging] = useState(false);
+
+  // Load language preference once on startup
+  useEffect(() => {
+    const loadLanguage = async () => {
+      const storedLang = await getStoredLanguage();
+      setTargetLanguage(storedLang);
+    };
+    loadLanguage();
+  }, []);
 
   const translateText = async (text: string): Promise<string> => {
-    if (targetLanguage === 'en') return text;
+    if (!text || targetLanguage === 'en') {
+      return text;
+    }
 
     try {
       const response = await fetch(`http://${SERVER_IP}:8000/translate`, {
@@ -48,26 +69,28 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
     }
   };
 
-  const handleSetTargetLanguage = async (lang: string) => {
+  const handleSetTargetLanguage = async (lang: string): Promise<void> => {
+    // Prevent concurrent language changes
+    if (isChanging) return;
+    
     try {
-      await AsyncStorage.setItem('targetLanguage', lang);
-      setTargetLanguage(lang);
+      setIsChanging(true);
+      
+      // Only update if language actually changed
+      if (lang !== targetLanguage) {
+        // Update state first to improve responsiveness
+        setTargetLanguage(lang);
+        
+        // Then persist to storage
+        await AsyncStorage.setItem('targetLanguage', lang);
+        console.log(`✅ Language saved to storage: ${lang}`);
+      }
     } catch (error) {
       console.error('Error saving language:', error);
+    } finally {
+      setIsChanging(false);
     }
   };
-
-  useEffect(() => {
-    const loadLanguagePreference = async () => {
-      try {
-        const saved = await AsyncStorage.getItem('targetLanguage');
-        if (saved) setTargetLanguage(saved);
-      } catch (error) {
-        console.error('Error loading language preference:', error);
-      }
-    };
-    loadLanguagePreference();
-  }, []);
 
   return (
     <TranslationContext.Provider value={{
