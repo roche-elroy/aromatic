@@ -1,7 +1,8 @@
 import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";  
 import { useState, useEffect, useRef, useCallback } from "react";  
-import { View, Text, Button, StyleSheet } from "react-native";
+import { View, Text, Button, StyleSheet, TouchableOpacity } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";  
+import { useSpeech } from '../../hooks/useSpeech';
 
 const SERVER_IP = "192.168.43.22";
 
@@ -16,6 +17,7 @@ export default function CameraScreen() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const connectionAttemptRef = useRef<number>(0);
+  const speakText = useSpeech();
 
   function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
@@ -138,6 +140,12 @@ export default function CameraScreen() {
     return closeWebSocket;
   }, [targetLanguage, connectWebSocket, closeWebSocket]);
 
+  const handleCameraPress = () => {
+    if (detectionResult) {
+      speakText(detectionResult);
+    }
+  };
+
   if (!permission?.granted) {  
     return (  
       <View style={styles.container}>  
@@ -149,27 +157,33 @@ export default function CameraScreen() {
 
   return (  
     <View style={styles.container}>  
-      <CameraView 
-        ref={cameraRef} 
+      <TouchableOpacity 
         style={styles.camera} 
-        facing={facing}
-        animateShutter={false}
+        onPress={handleCameraPress}
+        activeOpacity={0.9}
       >
-        {!isConnected && (
-          <Text style={styles.connectionStatus}>
-            {targetLanguage === 'hi' ? 'पुन: कनेक्ट हो रहा है...' : 'Reconnecting...'}
-          </Text>
-        )}
-        {detectionResult && (
-          <Text style={styles.detectionText}>{detectionResult}</Text>
-        )}
-        <View style={styles.buttonContainer}>
-          <Button 
-            title={targetLanguage === 'hi' ? 'कैमरा टॉगल करें' : 'Toggle Camera'} 
-            onPress={toggleCamera} 
-          />
-        </View>
-      </CameraView>  
+        <CameraView 
+          ref={cameraRef} 
+          style={StyleSheet.absoluteFillObject}
+          facing={facing}
+          animateShutter={false}
+        >
+          {!isConnected && (
+            <Text style={styles.connectionStatus}>
+              {targetLanguage === 'hi' ? 'पुन: कनेक्ट हो रहा है...' : 'Reconnecting...'}
+            </Text>
+          )}
+          {detectionResult && (
+            <Text style={styles.detectionText}>{detectionResult}</Text>
+          )}
+          <View style={styles.buttonContainer}>
+            <Button 
+              title={targetLanguage === 'hi' ? 'कैमरा टॉगल करें' : 'Toggle Camera'} 
+              onPress={toggleCamera} 
+            />
+          </View>
+        </CameraView>
+      </TouchableOpacity>
     </View>  
   );  
 }  
