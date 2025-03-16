@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from translation import translate_text
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, List
 
 app = FastAPI()
 
@@ -46,21 +46,29 @@ async def video_stream(websocket: WebSocket):
     client_id = id(websocket)
     target_lang = websocket.query_params.get("target", "en")
     
-    if target_lang not in ['en', 'hi']:
-        await websocket.close(code=1008, reason="Unsupported language")
-        return
-        
     try:
         await websocket.accept()
         active_connections[client_id] = websocket
         print(f"✅ WebSocket connected: {client_id} (target: {target_lang})")
+        
+        # Flag to track connection state
+        is_connected = True
 
-        while True:
+        while is_connected:
             try:
+                # Check if connection is still active before receiving
                 if not websocket.client_state.CONNECTED:
+                    print(f"🔄 Client state indicates disconnection: {client_id}")
+                    is_connected = False
                     break
 
-                data = await websocket.receive_text()
+                # Receive frame data with a timeout
+                data = await asyncio.wait_for(
+                    websocket.receive_text(), 
+                    timeout=5.0
+                )
+                
+                # Process image
                 frame_data = base64.b64decode(data)
                 np_frame = np.frombuffer(frame_data, np.uint8)
                 frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
@@ -68,33 +76,63 @@ async def video_stream(websocket: WebSocket):
                 if frame is None:
                     continue
 
+                # Run object detection
                 results = model(frame)[0]
                 detected_objects = [model.names[int(box.cls)] for box in results.boxes]
                 detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
 
+                # Translate only if target language is not English
                 translated_text = detection_text
                 if target_lang != "en":
                     translated_text = translate_text(detection_text, target_lang)
 
+                # Check connection again before sending response
                 if websocket.client_state.CONNECTED:
+                    # Create annotated image
                     _, buffer = cv2.imencode(".jpg", results.plot())
                     base64_frame = base64.b64encode(buffer).decode()
                     
+                    # Send response
                     await websocket.send_json({
                         "text": detection_text,
                         "translated_text": translated_text,
-                        "image": base64_frame
+                        "image": base64_frame,
+                        "language": target_lang
                     })
+                else:
+                    print(f"🔄 Client disconnected before sending response: {client_id}")
+                    is_connected = False
+                    break
 
+            except asyncio.TimeoutError:
+                # Handle timeout gracefully
+                print(f"⏱️ Receive timeout: {client_id}")
+                continue
+                
             except WebSocketDisconnect:
+                print(f"🔒 WebSocket disconnect: {client_id}")
+                is_connected = False
                 break
+                
             except Exception as e:
-                print(f"❌ Error processing frame: {str(e)}")
+                print(f"❌ Processing error: {str(e)}")
+                # Only continue if connection is still active
+                if not websocket.client_state.CONNECTED:
+                    is_connected = False
+                    break
                 continue
 
+    except Exception as e:
+        print(f"❌ Connection error: {str(e)}")
+        
     finally:
-        if client_id in active_connections:
-            del active_connections[client_id]
+        # Clean up connection
+        try:
+            if client_id in active_connections:
+                del active_connections[client_id]
+            print(f"🧹 Connection cleaned up: {client_id}")
+        except Exception as e:
+            print(f"⚠️ Cleanup error: {str(e)}")
 
 @app.get("/")
 async def root():
