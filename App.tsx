@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { TranslationProvider, useTranslation } from './src/context/TranslationContext';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -8,8 +9,9 @@ import SettingsScreen from './src/components/settings/Settings';
 import EmergencyScreen from './src/components/emergency/Emergency';
 import LocationScreen from './src/components/location/Location';
 import ProfileScreen from './src/components/profile/Profile';
-import { useEffect, useState } from 'react';
+import { useEffect, useState as useStateEffect } from 'react';
 import "./src/lib/i18n";
+import { BiometricAuth } from './src/components/auth/BiometricAuth';
 
 //comment the below line to show errors
 import { LogBox } from 'react-native';
@@ -19,13 +21,14 @@ const Tab = createBottomTabNavigator();
 
 function AppContent() {
   const { translateText, targetLanguage } = useTranslation();
-  const [translations, setTranslations] = useState({
+  const [translations, setTranslations] = useStateEffect({
     settings: 'Settings',
     emergency: 'Emergency',
     camera: 'Camera',
     location: 'Location',
     profile: 'Profile'
   });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const translateLabels = async () => {
@@ -41,6 +44,10 @@ function AppContent() {
 
     translateLabels();
   }, [targetLanguage, translateText]);
+
+  if (!isAuthenticated) {
+    return <BiometricAuth onAuthSuccess={() => setIsAuthenticated(true)} />;
+  }
 
   return (
     <NavigationContainer>
