@@ -11,6 +11,7 @@ export default function CameraScreen() {
   const { targetLanguage } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();  
   const [detectionResult, setDetectionResult] = useState<string>("");
+  const [depthValue, setDepthValue] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [facing, setFacing] = useState<CameraType>("back");
   const cameraRef = useRef<CameraView>(null);
@@ -88,6 +89,9 @@ export default function CameraScreen() {
         if (result.translated_text) {
           setDetectionResult(result.translated_text);
         }
+        if (result.depth !== undefined) {
+          setDepthValue(result.depth);
+        }
       } catch (error) {
         console.error("⚠️ Parse Error:", error);
       }
@@ -143,7 +147,10 @@ export default function CameraScreen() {
 
   const handleCameraPress = () => {
     if (detectionResult) {
-      speakText(detectionResult);
+      const textToSpeak = depthValue 
+        ? `${detectionResult}. ${targetLanguage === 'hi' ? 'दूरी' : 'Distance'}: ${depthValue} centimeters`
+        : detectionResult;
+      speakText(textToSpeak);
     }
   };
 
@@ -175,16 +182,21 @@ export default function CameraScreen() {
             </Text>
           )}
           {detectionResult && (
-            <Text style={styles.detectionText}>{detectionResult}</Text>
+            <View style={styles.detectionContainer}>
+              <Text style={styles.detectionText}>{detectionResult}</Text>
+              {depthValue !== null && (
+                <Text style={styles.depthText}>
+                  {targetLanguage === 'hi' 
+                    ? `दूरी: ${depthValue} सेंटीमीटर`
+                    : `Distance: ${depthValue} cm`}
+                </Text>
+              )}
+            </View>
           )}
             <View style={[styles.buttonContainer, { flexDirection: 'row', justifyContent: 'center' }]}>
             <TouchableOpacity 
               onPress={toggleCamera}
-              style={{
-              backgroundColor: 'rgba(0,0,0, 0.74)',
-              borderRadius: 50,
-              padding: 15,
-              }}
+              style={styles.cameraButton}
             >
               <Ionicons name="camera-reverse" size={30} color="white" />
             </TouchableOpacity>
@@ -236,5 +248,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
+  },
+  detectionContainer: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 10,
+  },
+  depthText: {
+    color: '#4CAF50',
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  cameraButton: {
+    backgroundColor: 'rgba(0,0,0,0.74)',
+    borderRadius: 50,
+    padding: 15,
   }
 });
