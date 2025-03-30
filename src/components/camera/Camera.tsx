@@ -147,10 +147,7 @@ export default function CameraScreen() {
 
   const handleCameraPress = () => {
     if (detectionResult) {
-      const textToSpeak = depthValue 
-        ? `${detectionResult}. ${targetLanguage === 'hi' ? 'दूरी' : 'Distance'}: ${depthValue} centimeters`
-        : detectionResult;
-      speakText(textToSpeak);
+      speakText(detectionResult);
     }
   };
 
