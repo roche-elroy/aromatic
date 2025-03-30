@@ -7,6 +7,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from translation import translate_text
+from depth import get_depth
 from pydantic import BaseModel
 from typing import Dict, List
 
@@ -81,6 +82,10 @@ async def video_stream(websocket: WebSocket):
                 detected_objects = [model.names[int(box.cls)] for box in results.boxes]
                 detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
 
+                depth_value = get_depth(frame)
+                if depth_value is not None:
+                    detection_text += f" | Depth: {depth_value:.2f} cm"
+
                 # Translate only if target language is not English
                 translated_text = detection_text
                 if target_lang != "en":
@@ -133,6 +138,14 @@ async def video_stream(websocket: WebSocket):
             print(f"🧹 Connection cleaned up: {client_id}")
         except Exception as e:
             print(f"⚠️ Cleanup error: {str(e)}")
+
+@app.get("/depth")
+async def get_depth_value():
+    """API endpoint to return the estimated depth in cm."""
+    distance = get_depth()
+    if distance is None:
+        return {"error": "Failed to capture depth"}
+    return {"estimated_distance_cm": distance}
 
 @app.get("/")
 async def root():

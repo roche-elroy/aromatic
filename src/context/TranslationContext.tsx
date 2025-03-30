@@ -31,6 +31,17 @@ const getStoredLanguage = async (): Promise<string> => {
   }
 };
 
+const defaultTranslations = {
+  distance: {
+    en: 'Distance',
+    hi: 'दूरी'
+  },
+  centimeters: {
+    en: 'cm',
+    hi: 'सेंटीमीटर'
+  }
+};
+
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
   const [targetLanguage, setTargetLanguage] = useState<string>('en');
   const [isChanging, setIsChanging] = useState(false);
