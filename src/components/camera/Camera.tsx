@@ -182,15 +182,8 @@ export default function CameraScreen() {
             </Text>
           )}
           {detectionResult && (
-            <View style={styles.detectionContainer}>
+            <View>
               <Text style={styles.detectionText}>{detectionResult}</Text>
-              {depthValue !== null && (
-                <Text style={styles.depthText}>
-                  {targetLanguage === 'hi' 
-                    ? `दूरी: ${depthValue} सेंटीमीटर`
-                    : `Distance: ${depthValue} cm`}
-                </Text>
-              )}
             </View>
           )}
             <View style={[styles.buttonContainer, { flexDirection: 'row', justifyContent: 'center' }]}>
@@ -228,7 +221,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 5,
     position: 'absolute',
-    top: 40,
+    top: 60,
     left: 20,
     right: 20,
     textAlign: 'center',
@@ -249,21 +242,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  detectionContainer: {
-    position: 'absolute',
-    top: 40,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 10,
-    borderRadius: 10,
-  },
-  depthText: {
-    color: '#4CAF50',
-    fontSize: 16,
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
+  // detectionContainer: {
+  //   position: 'absolute',
+  //   top: 40,
+  //   left: 20,
+  //   right: 20,
+  //   backgroundColor: 'rgba(0,0,0,0.7)',
+  //   padding: 10,
+  //   borderRadius: 10,
+  // },
+
   cameraButton: {
     backgroundColor: 'rgba(0,0,0,0.74)',
     borderRadius: 50,
