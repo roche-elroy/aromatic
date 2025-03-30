@@ -82,11 +82,14 @@ async def video_stream(websocket: WebSocket):
                 detected_objects = [model.names[int(box.cls)] for box in results.boxes]
                 detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
 
+                # Get depth estimation
                 depth_value = get_depth(frame)
+                depth_text = ""
                 if depth_value is not None:
-                    detection_text += f" | Depth: {depth_value:.2f} cm"
+                    depth_text = f" | Distance: {depth_value:.0f}cm"
+                    detection_text += depth_text
 
-                # Translate only if target language is not English
+                # Translate if needed
                 translated_text = detection_text
                 if target_lang != "en":
                     translated_text = translate_text(detection_text, target_lang)
@@ -102,7 +105,8 @@ async def video_stream(websocket: WebSocket):
                         "text": detection_text,
                         "translated_text": translated_text,
                         "image": base64_frame,
-                        "language": target_lang
+                        "language": target_lang,
+                        "depth": depth_value
                     })
                 else:
                     print(f"🔄 Client disconnected before sending response: {client_id}")
