@@ -4,8 +4,9 @@ import { View, Text, Button, StyleSheet, TouchableOpacity } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";  
 import { useSpeech } from '../../hooks/useSpeech';
 import { Ionicons } from '@expo/vector-icons';
+import { SERVER_IP } from "../../lib/constants";
 
-const SERVER_IP = "192.168.43.22";
+// const SERVER_IP = "192.168.43.22";
 
 export default function CameraScreen() {  
   const { targetLanguage } = useTranslation();
