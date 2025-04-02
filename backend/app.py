@@ -3,6 +3,9 @@ import numpy as np
 import asyncio
 import base64
 import os
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
+from threading import Lock
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
@@ -10,6 +13,24 @@ from translation import translate_text
 from depth import get_depth
 from pydantic import BaseModel
 from typing import Dict, List
+
+# Initialize thread pools and queues
+detection_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="detection")
+depth_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="depth")
+translation_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="translation")
+
+# Create result caches with locks
+result_cache = {}
+cache_lock = Lock()
+CACHE_TIMEOUT = 0.5  # 500ms cache timeout
+
+class ProcessingQueue:
+    def __init__(self):
+        self.detection_queue = Queue(maxsize=3)
+        self.depth_queue = Queue(maxsize=3)
+        self.translation_queue = Queue(maxsize=3)
+
+processing_queues = {}
 
 app = FastAPI()
 
@@ -42,31 +63,58 @@ print(f"🔄 Loading YOLO model from {MODEL_PATH}")
 model = YOLO(MODEL_PATH)
 print("✅ Model loaded successfully")
 
+async def process_frame_detection(frame):
+    try:
+        results = model(frame)[0]
+        detected_objects = [model.names[int(box.cls)] for box in results.boxes]
+        detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
+        return results, detection_text
+    except Exception as e:
+        print(f"❌ Detection error: {str(e)}")
+        return None, None
+
+async def process_frame_depth(frame):
+    try:
+        return await asyncio.get_event_loop().run_in_executor(
+            depth_executor,
+            get_depth,
+            frame
+        )
+    except Exception as e:
+        print(f"❌ Depth error: {str(e)}")
+        return None
+
+async def process_translation(text, target_lang):
+    try:
+        if target_lang == "en":
+            return text
+        return await asyncio.get_event_loop().run_in_executor(
+            translation_executor,
+            translate_text,
+            text,
+            target_lang
+        )
+    except Exception as e:
+        print(f"❌ Translation error: {str(e)}")
+        return text
+
 @app.websocket("/ws/video")
 async def video_stream(websocket: WebSocket):
     client_id = id(websocket)
     target_lang = websocket.query_params.get("target", "en")
+    processing_queues[client_id] = ProcessingQueue()
     
     try:
         await websocket.accept()
         active_connections[client_id] = websocket
         print(f"✅ WebSocket connected: {client_id} (target: {target_lang})")
         
-        # Flag to track connection state
-        is_connected = True
-
-        while is_connected:
+        while True:
             try:
-                # Check if connection is still active before receiving
-                if not websocket.client_state.CONNECTED:
-                    print(f"🔄 Client state indicates disconnection: {client_id}")
-                    is_connected = False
-                    break
-
-                # Receive frame data with a timeout
+                # Receive frame with shorter timeout
                 data = await asyncio.wait_for(
-                    websocket.receive_text(), 
-                    timeout=10
+                    websocket.receive_text(),
+                    timeout=5.0
                 )
                 
                 # Process image
@@ -77,71 +125,61 @@ async def video_stream(websocket: WebSocket):
                 if frame is None:
                     continue
 
-                # Run object detection
-                results = model(frame)[0]
-                detected_objects = [model.names[int(box.cls)] for box in results.boxes]
-                detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
+                # Process tasks concurrently
+                detection_task = asyncio.create_task(process_frame_detection(frame))
+                depth_task = asyncio.create_task(process_frame_depth(frame))
+                
+                # Wait for detection and depth results
+                results, detection_text = await detection_task
+                depth_value = await depth_task
 
-                # Get depth estimation
-                depth_value = get_depth(frame)
-                depth_text = ""
-                if depth_value is not None:
-                    depth_text = f" | Distance: {depth_value:.0f}cm"
-                    detection_text += depth_text
+                if results is not None:
+                    # Add depth information if available
+                    if depth_value is not None:
+                        detection_text += f" | Distance: {depth_value:.0f}cm"
 
-                # Translate if needed
-                translated_text = detection_text
-                if target_lang != "en":
-                    translated_text = translate_text(detection_text, target_lang)
+                    # Process translation concurrently
+                    translated_text = await process_translation(detection_text, target_lang)
 
-                # Check connection again before sending response
-                if websocket.client_state.CONNECTED:
                     # Create annotated image
                     _, buffer = cv2.imencode(".jpg", results.plot())
                     base64_frame = base64.b64encode(buffer).decode()
-                    
-                    # Send response
-                    await websocket.send_json({
-                        "text": detection_text,
-                        "translated_text": translated_text,
-                        "image": base64_frame,
-                        "language": target_lang,
-                        "depth": depth_value
-                    })
-                else:
-                    print(f"🔄 Client disconnected before sending response: {client_id}")
-                    is_connected = False
-                    break
+
+                    # Send response if connection is still active
+                    if websocket.client_state.CONNECTED:
+                        await websocket.send_json({
+                            "text": detection_text,
+                            "translated_text": translated_text,
+                            "image": base64_frame,
+                            "language": target_lang,
+                            "depth": depth_value
+                        })
 
             except asyncio.TimeoutError:
-                # Handle timeout gracefully
-                print(f"⏱️ Receive timeout: {client_id}")
+                # Use shorter timeout and continue silently
                 continue
-                
             except WebSocketDisconnect:
-                print(f"🔒 WebSocket disconnect: {client_id}")
-                is_connected = False
                 break
-                
             except Exception as e:
                 print(f"❌ Processing error: {str(e)}")
-                # Only continue if connection is still active
                 if not websocket.client_state.CONNECTED:
-                    is_connected = False
                     break
                 continue
 
-    except Exception as e:
-        print(f"❌ Connection error: {str(e)}")
-        
     finally:
-        # Clean up connection
-        try:
-            if client_id in active_connections:
-                del active_connections[client_id]
-            print(f"🧹 Connection cleaned up: {client_id}")
-        except Exception as e:
-            print(f"⚠️ Cleanup error: {str(e)}")
+        # Cleanup
+        if client_id in active_connections:
+            del active_connections[client_id]
+        if client_id in processing_queues:
+            del processing_queues[client_id]
+        print(f"🧹 Connection cleaned up: {client_id}")
+
+# Add graceful shutdown
+@app.on_event("shutdown")
+async def shutdown_event():
+    detection_executor.shutdown(wait=True)
+    depth_executor.shutdown(wait=True)
+    translation_executor.shutdown(wait=True)
 
 @app.get("/depth")
 async def get_depth_value():
