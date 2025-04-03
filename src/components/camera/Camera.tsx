@@ -6,12 +6,6 @@ import { useSpeech } from '../../hooks/useSpeech';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
 
-<<<<<<< HEAD
-const SERVER_IP = "192.168.1.107";
-=======
-// const SERVER_IP = "192.168.43.22";
->>>>>>> 8ec08f4d673ef46142821dc5d7c8ccf91c67a051
-
 export default function CameraScreen() {  
   const { targetLanguage } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();  
