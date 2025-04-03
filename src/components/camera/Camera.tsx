@@ -4,8 +4,13 @@ import { View, Text, Button, StyleSheet, TouchableOpacity } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";  
 import { useSpeech } from '../../hooks/useSpeech';
 import { Ionicons } from '@expo/vector-icons';
+import { SERVER_IP } from "../../lib/constants";
 
+<<<<<<< HEAD
 const SERVER_IP = "192.168.1.107";
+=======
+// const SERVER_IP = "192.168.43.22";
+>>>>>>> 8ec08f4d673ef46142821dc5d7c8ccf91c67a051
 
 export default function CameraScreen() {  
   const { targetLanguage } = useTranslation();
@@ -14,6 +19,8 @@ export default function CameraScreen() {
   const [depthValue, setDepthValue] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [facing, setFacing] = useState<CameraType>("back");
+  const [isObjectClose, setIsObjectClose] = useState(false);
+  const PROXIMITY_THRESHOLD = 100; // 75cm threshold
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);
@@ -91,6 +98,16 @@ export default function CameraScreen() {
         }
         if (result.depth !== undefined) {
           setDepthValue(result.depth);
+          const isClose = result.depth < PROXIMITY_THRESHOLD;
+          
+          // Only trigger warning if state changes from far to close
+          if (isClose && !isObjectClose) {
+            const warningText = targetLanguage === 'hi'
+              ? 'आप वस्तु के बहुत करीब हैं'
+              : 'You are too close to the object';
+            speakText(warningText);
+          }
+          setIsObjectClose(isClose);
         }
       } catch (error) {
         console.error("⚠️ Parse Error:", error);
@@ -181,16 +198,23 @@ export default function CameraScreen() {
           {detectionResult && (
             <View>
               <Text style={styles.detectionText}>{detectionResult}</Text>
+              {isObjectClose && (
+                <Text style={styles.proximityWarning}>
+                  {targetLanguage === 'hi' 
+                    ? 'आप वस्तु के बहुत करीब हैं'
+                    : 'You are too close to the object'}
+                </Text>
+              )}
             </View>
           )}
-            <View style={[styles.buttonContainer, { flexDirection: 'row', justifyContent: 'center' }]}>
+          <View style={[styles.buttonContainer, { flexDirection: 'row', justifyContent: 'center' }]}>
             <TouchableOpacity 
               onPress={toggleCamera}
               style={styles.cameraButton}
             >
               <Ionicons name="camera-reverse" size={30} color="white" />
             </TouchableOpacity>
-            </View>
+          </View>
         </CameraView>
       </TouchableOpacity>
     </View>  
@@ -239,19 +263,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  // detectionContainer: {
-  //   position: 'absolute',
-  //   top: 40,
-  //   left: 20,
-  //   right: 20,
-  //   backgroundColor: 'rgba(0,0,0,0.7)',
-  //   padding: 10,
-  //   borderRadius: 10,
-  // },
-
   cameraButton: {
     backgroundColor: 'rgba(0,0,0,0.74)',
     borderRadius: 50,
     padding: 15,
-  }
+  },
+  proximityWarning: {
+    color: '#ff4444',
+    fontSize: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 5,
+    position: 'absolute',
+    top: 120,
+    left: 20,
+    right: 20,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
 });
