@@ -36,7 +36,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to detect objects and calculate distances."
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to detect objects and calculate distances.",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone",
         }
       ]
     ]

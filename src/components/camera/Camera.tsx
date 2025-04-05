@@ -8,13 +8,13 @@ import { SERVER_IP } from "../../lib/constants";
 
 export default function CameraScreen() {  
   const { targetLanguage } = useTranslation();
-  const [permission, requestPermission] = useCameraPermissions();  
+  const [permission, setPermission] = useCameraPermissions();  
   const [detectionResult, setDetectionResult] = useState<string>("");
   const [depthValue, setDepthValue] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [facing, setFacing] = useState<CameraType>("back");
   const [isObjectClose, setIsObjectClose] = useState(false);
-  const PROXIMITY_THRESHOLD = 100; // 75cm threshold
+  const PROXIMITY_THRESHOLD = 10; // 75cm threshold
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);
@@ -162,14 +162,46 @@ export default function CameraScreen() {
     }
   };
 
-  if (!permission?.granted) {  
-    return (  
-      <View style={styles.container}>  
-        <Text style={styles.message}>No access to camera</Text>  
-        <Button title="Grant Permission" onPress={requestPermission} />  
-      </View>  
-    );  
-  }  
+  // remove the code if not working
+  // Log permission state for debugging
+  useEffect(() => {
+    console.log("Permission state:", permission);
+  }, [permission]);
+
+  // Automatically request permission if not granted
+  useEffect(() => {
+    if (!permission || !permission.granted) {
+      setPermission();
+    }
+  }, [permission]);
+
+  // If permission is still null, show a loading state
+  if (!permission) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>Checking permissions...</Text>
+      </View>
+    );
+  }
+
+  // If permission is denied, show a retry button
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>No access to camera</Text>
+        <Button title="Grant Permission" onPress={setPermission} />
+      </View>
+    );
+  }
+
+  // if (!permission?.granted) {  
+  //   return (  
+  //     <View style={styles.container}>  
+  //       <Text style={styles.message}>No access to camera</Text>  
+  //       <Button title="Grant Permission" onPress={requestPermission} />  
+  //     </View>  
+  //   );  
+  // }  
 
   return (  
     <View style={styles.container}>  
