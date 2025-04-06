@@ -28,6 +28,7 @@
     "expo-speech": "~13.0.1",
     "expo-status-bar": "~2.0.1",
     "fastapi": "^0.0.8",
+    "firebase": "^11.6.0",
     "i18next": "^24.2.2",
     "postcss": "^8.5.3",
     "react": "18.3.1",
