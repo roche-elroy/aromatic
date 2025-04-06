@@ -2,37 +2,30 @@
 
 This application demonstrates real-time object detection using React Native (Expo) and a Python backend powered by YOLO (You Only Look Once).
 
-## Project Structure
-
-## Setting up a Virtual Environment
-
-1. Create a virtual environment:
-    ```sh
-    python3 -m venv venv
-    ```
-
-2. Activate the virtual environment:
-
-    - On macOS and Linux:
-        ```sh
-        source venv/bin/activate
-        ```
-    - On Windows:
-        ```sh
-        .\venv\Scripts\activate
-        ```
-
-3. Install the required dependencies:
-    ```sh
-    pip install -r backend/requirements.txt
-    ```
-    
-4. Install the requied expo dependencies:
-    ```sh
-   npm install
-    ```
-Note:  
-    In src\components\camera\Camera.tsx  
+# Note 1:
+      
+    In src\components\camera\Camera.tsx and src\context\TranslationContext.tsx 
     const SERVER_IP = "192.168..";  
     replace with your actual IP address 
     
+# Note 2:
+
+    backend\twilio_calls.py after the part
+    router = APIRouter()
+    add the secret key 
+
+# Note 3:
+
+    In src\components\emergency\Emergency.tsx
+    The function definiation of makeEmergencyCall,sendEmergencyMessage,sendWhatsAppMessage
+    const response = await axios.post('http://192.168.1.10:8000/send-whatsapp', {
+    Change it to your ip address
+
+# Note 4:
+
+    `python setup.py` and `npm install` in termianl to install required dependencies
+
+# Note 5:
+
+    To change the emergency call content change in backend\twilio_calls.py at twiml=<Response></Response>
+    To change sms,whatsapp content change in src\components\emergency\Emergency.tsx at the onpress function calls
