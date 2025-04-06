@@ -1,20 +1,21 @@
-import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";  
-import { useState, useEffect, useRef, useCallback } from "react";  
-import { View, Text, Button, StyleSheet, TouchableOpacity } from "react-native";
-import { useTranslation } from "../../context/TranslationContext";  
+import { CameraPictureOptions, CameraType, CameraView, PermissionStatus } from "expo-camera";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useTranslation } from "../../context/TranslationContext";
 import { useSpeech } from '../../hooks/useSpeech';
+import { useCamera } from '../../permissions/useCamera';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
 
 export default function CameraScreen() {  
   const { targetLanguage } = useTranslation();
-  const [permission, setPermission] = useCameraPermissions();  
+  const { hasPermission, requestPermission } = useCamera();
   const [detectionResult, setDetectionResult] = useState<string>("");
   const [depthValue, setDepthValue] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [facing, setFacing] = useState<CameraType>("back");
   const [isObjectClose, setIsObjectClose] = useState(false);
-  const PROXIMITY_THRESHOLD = 10; // 75cm threshold
+  const PROXIMITY_THRESHOLD = 10; // 75cm threshold (update as needed)
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);
@@ -32,9 +33,7 @@ export default function CameraScreen() {
     isStreaming.current = false;
     
     if (wsRef.current) {
-      // Only close if not already closing/closed
-      if (wsRef.current.readyState === WebSocket.OPEN || 
-          wsRef.current.readyState === WebSocket.CONNECTING) {
+      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
         try {
           wsRef.current.close();
         } catch (error) {
@@ -44,7 +43,6 @@ export default function CameraScreen() {
       wsRef.current = null;
     }
     
-    // Clear any pending reconnection
     if (reconnectTimeout.current) {
       clearTimeout(reconnectTimeout.current);
       reconnectTimeout.current = null;
@@ -52,20 +50,15 @@ export default function CameraScreen() {
   }, []);
 
   const connectWebSocket = useCallback(() => {
-    // Prevent multiple simultaneous connection attempts
     connectionAttemptRef.current += 1;
     const currentAttempt = connectionAttemptRef.current;
     
-    // Clean up existing connection
     closeWebSocket();
-    
     console.log(`🔄 Connecting WebSocket with language: ${targetLanguage}`);
     setIsConnected(false);
     
     const ws = new WebSocket(`ws://${SERVER_IP}:8000/ws/video?target=${targetLanguage}`);
-
     ws.onopen = () => {
-      // Ensure this is still the most recent connection attempt
       if (currentAttempt !== connectionAttemptRef.current) {
         console.log("⚠️ Outdated connection attempt, closing");
         ws.close();
@@ -94,7 +87,7 @@ export default function CameraScreen() {
           setDepthValue(result.depth);
           const isClose = result.depth < PROXIMITY_THRESHOLD;
           
-          // Only trigger warning if state changes from far to close
+          // Trigger warning speech only once per change.
           if (isClose && !isObjectClose) {
             const warningText = targetLanguage === 'hi'
               ? 'आप वस्तु के बहुत करीब हैं'
@@ -114,7 +107,6 @@ export default function CameraScreen() {
       wsRef.current = null;
       setIsConnected(false);
       
-      // Only attempt reconnect if this is the most recent connection
       if (currentAttempt === connectionAttemptRef.current) {
         reconnectTimeout.current = setTimeout(connectWebSocket, 2000);
       }
@@ -134,25 +126,19 @@ export default function CameraScreen() {
 
         const photo = await cameraRef.current.takePictureAsync(pictureOptions);
 
-        // Double-check connection is still valid
         if (isStreaming.current && wsRef.current?.readyState === WebSocket.OPEN && photo?.base64) {
           wsRef.current.send(photo.base64);
         }
       } catch (err) {
         console.error("🚫 Frame capture error:", err);
       }
-      
-      // Wait before capturing next frame
       await new Promise(resolve => setTimeout(resolve, 200));
     }
   };
 
-  // Handle language changes with a clean disconnect/reconnect
   useEffect(() => {
     console.log(`📢 Language changed to: ${targetLanguage}`);
     connectWebSocket();
-    
-    // Cleanup function
     return closeWebSocket;
   }, [targetLanguage, connectWebSocket, closeWebSocket]);
 
@@ -162,47 +148,26 @@ export default function CameraScreen() {
     }
   };
 
-  // remove the code if not working
-  // Log permission state for debugging
-  useEffect(() => {
-    console.log("Permission state:", permission);
-  }, [permission]);
+  // console.log(`hasPermission state: ${hasPermission}`);
 
-  // Automatically request permission if not granted
-  useEffect(() => {
-    if (!permission || !permission.granted) {
-      setPermission();
-    }
-  }, [permission]);
-
-  // If permission is still null, show a loading state
-  if (!permission) {
+  // Show permission UI if not granted.
+  if (!hasPermission) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.message}>Checking permissions...</Text>
+      <View style={styles.permissionContainer}>
+        <TouchableOpacity 
+          style={styles.permissionButton}
+          activeOpacity={0.6}
+          onPress={requestPermission}
+        >
+          <Text style={styles.permissionButtonText}>
+            {targetLanguage === 'hi' ? 'अनुमति दें' : 'Grant Permission'}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  // If permission is denied, show a retry button
-  if (!permission.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.message}>No access to camera</Text>
-        <Button title="Grant Permission" onPress={setPermission} />
-      </View>
-    );
-  }
-
-  // if (!permission?.granted) {  
-  //   return (  
-  //     <View style={styles.container}>  
-  //       <Text style={styles.message}>No access to camera</Text>  
-  //       <Button title="Grant Permission" onPress={requestPermission} />  
-  //     </View>  
-  //   );  
-  // }  
-
+  // Main camera view.
   return (  
     <View style={styles.container}>  
       <TouchableOpacity 
@@ -226,7 +191,7 @@ export default function CameraScreen() {
               <Text style={styles.detectionText}>{detectionResult}</Text>
               {isObjectClose && (
                 <Text style={styles.proximityWarning}>
-                  {targetLanguage === 'hi' 
+                  {targetLanguage === 'hi'
                     ? 'आप वस्तु के बहुत करीब हैं'
                     : 'You are too close to the object'}
                 </Text>
@@ -250,6 +215,12 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({  
   container: { 
     flex: 1,
+    backgroundColor: '#000',
+  },
+  permissionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#000',
   },
   camera: {
@@ -306,5 +277,23 @@ const styles = StyleSheet.create({
     right: 20,
     textAlign: 'center',
     fontWeight: 'bold',
+  },
+  permissionButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
