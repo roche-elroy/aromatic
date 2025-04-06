@@ -1,164 +1,143 @@
-import {
-  CameraMode,
-  CameraType,
-  CameraView,
-  useCameraPermissions,
-} from "expo-camera";
-import { useRef, useState } from "react";
-import { Button, Pressable, StyleSheet, Text, View } from "react-native";
-import { Image } from "expo-image";
-import { AntDesign } from "@expo/vector-icons";
-import { Feather } from "@expo/vector-icons";
-import { FontAwesome6 } from "@expo/vector-icons";
+import React, { useState } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { TranslationProvider, useTranslation } from './src/context/TranslationContext';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import CameraScreen from './src/components/camera/Camera';
+import SettingsScreen from './src/components/settings/Settings';
+import EmergencyScreen from './src/components/emergency/Emergency';
+import LocationScreen from './src/components/location/Location';
+import ProfileScreen from './src/components/profile/Profile';
+import { useEffect, useState as useStateEffect } from 'react';
+import "./src/lib/i18n";
+import { BiometricAuth } from './src/components/auth/BiometricAuth';
 
-export default function App() {
-  const [permission, requestPermission] = useCameraPermissions();
-  const ref = useRef<CameraView>(null);
-  const [uri, setUri] = useState<string | null>(null);
-  const [mode, setMode] = useState<CameraMode>("picture");
-  const [facing, setFacing] = useState<CameraType>("back");
-  const [recording, setRecording] = useState(false);
+//comment the below line to show errors
+import { LogBox } from 'react-native';
+LogBox.ignoreAllLogs(); //Ignore all log notifications
 
-  if (!permission) {
-    return null;
+const Tab = createBottomTabNavigator();
+
+function AppContent() {
+  const { translateText, targetLanguage } = useTranslation();
+  const [translations, setTranslations] = useStateEffect({
+    settings: 'Settings',
+    emergency: 'Emergency',
+    camera: 'Camera',
+    location: 'Location',
+    profile: 'Profile'
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const translateLabels = async () => {
+      const translated = {
+        settings: await translateText('Settings'),
+        emergency: await translateText('Emergency'),
+        camera: await translateText('Camera'),
+        location: await translateText('Location'),
+        profile: await translateText('Profile')
+      };
+      setTranslations(translated);
+    };
+
+    translateLabels();
+  }, [targetLanguage, translateText]);
+
+  if (!isAuthenticated) {
+    return <BiometricAuth onAuthSuccess={() => setIsAuthenticated(true)} />;
   }
-
-  if (!permission.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: "center" }}>
-          We need your permission to use the camera
-        </Text>
-        <Button onPress={requestPermission} title="Grant permission" />
-      </View>
-    );
-  }
-
-  const takePicture = async () => {
-    const photo = await ref.current?.takePictureAsync();
-    setUri(photo?.uri);
-  };
-
-  const recordVideo = async () => {
-    if (recording) {
-      setRecording(false);
-      ref.current?.stopRecording();
-      return;
-    }
-    setRecording(true);
-    const video = await ref.current?.recordAsync();
-    console.log({ video });
-  };
-
-  const toggleMode = () => {
-    setMode((prev) => (prev === "picture" ? "video" : "picture"));
-  };
-
-  const toggleFacing = () => {
-    setFacing((prev) => (prev === "back" ? "front" : "back"));
-  };
-
-  const renderPicture = () => {
-    return (
-      <View>
-        <Image
-          source={{ uri }}
-          contentFit="contain"
-          style={{ width: 300, aspectRatio: 1 }}
-        />
-        <Button onPress={() => setUri(null)} title="Take another picture" />
-      </View>
-    );
-  };
-
-  const renderCamera = () => {
-    return (
-      <CameraView
-        style={styles.camera}
-        ref={ref}
-        mode={mode}
-        facing={facing}
-        mute={false}
-        responsiveOrientationWhenOrientationLocked
-      >
-        <View style={styles.shutterContainer}>
-          <Pressable onPress={toggleMode}>
-            {mode === "picture" ? (
-              <AntDesign name="picture" size={32} color="white" />
-            ) : (
-              <Feather name="video" size={32} color="white" />
-            )}
-          </Pressable>
-          <Pressable onPress={mode === "picture" ? takePicture : recordVideo}>
-            {({ pressed }) => (
-              <View
-                style={[
-                  styles.shutterBtn,
-                  {
-                    opacity: pressed ? 0.5 : 1,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.shutterBtnInner,
-                    {
-                      backgroundColor: mode === "picture" ? "white" : "red",
-                    },
-                  ]}
-                />
-              </View>
-            )}
-          </Pressable>
-          <Pressable onPress={toggleFacing}>
-            <FontAwesome6 name="rotate-left" size={32} color="white" />
-          </Pressable>
-        </View>
-      </CameraView>
-    );
-  };
 
   return (
-    <View style={styles.container}>
-      {uri ? renderPicture() : renderCamera()}
-    </View>
+    <NavigationContainer>
+      <Tab.Navigator
+        initialRouteName="Camera"
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ focused, color, size }) => {
+            let iconName: keyof typeof Ionicons.glyphMap;
+
+            switch (route.name) {
+              case 'Camera':
+                iconName = focused ? 'camera' : 'camera-outline';
+                break;
+              case 'Settings':
+                iconName = focused ? 'settings' : 'settings-outline';
+                break;
+              case 'Emergency':
+                iconName = focused ? 'warning' : 'warning-outline';
+                break;
+              case 'Location':
+                iconName = focused ? 'location' : 'location-outline';
+                break;
+              case 'Profile':
+                iconName = focused ? 'person' : 'person-outline';
+                break;
+              default:
+                iconName = 'help-outline';
+            }
+
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+          tabBarActiveTintColor: '#007AFF',
+          tabBarInactiveTintColor: 'gray',
+          tabBarStyle: styles.tabBar,
+          headerStyle: styles.header,
+          headerTintColor: '#fff',
+          headerTitleStyle: styles.headerTitle,
+        })}
+      >
+        <Tab.Screen 
+          name="Settings" 
+          component={SettingsScreen}
+          options={{ title: translations.settings }}
+        />
+        <Tab.Screen 
+          name="Emergency" 
+          component={EmergencyScreen}
+          options={{ title: translations.emergency }}
+        />
+        <Tab.Screen 
+          name="Camera" 
+          component={CameraScreen}
+          options={{ title: translations.camera }}
+        />
+        <Tab.Screen 
+          name="Location" 
+          component={LocationScreen}
+          options={{ title: translations.location }}
+        />
+        <Tab.Screen 
+          name="Profile" 
+          component={ProfileScreen}
+          options={{ title: translations.profile }}
+        />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <TranslationProvider>
+      <AppContent />
+    </TranslationProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
+  tabBar: {
+    backgroundColor: '#fff',
+    height: 60,
+    paddingBottom: 5,
+    paddingTop: 5,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
   },
-  camera: {
-    flex: 1,
-    width: "100%",
+  header: {
+    backgroundColor: '#000',
   },
-  shutterContainer: {
-    position: "absolute",
-    bottom: 44,
-    left: 0,
-    width: "100%",
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 30,
-  },
-  shutterBtn: {
-    backgroundColor: "transparent",
-    borderWidth: 5,
-    borderColor: "white",
-    width: 85,
-    height: 85,
-    borderRadius: 45,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  shutterBtnInner: {
-    width: 70,
-    height: 70,
-    borderRadius: 50,
-  },
+  headerTitle: {
+    fontSize: 18,
+  }
 });

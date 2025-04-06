@@ -3,6 +3,8 @@
 # dependencies
 node_modules/
 
+__pycache__/
+
 # Expo
 .expo/
 dist/
@@ -34,5 +36,3 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
-
-app-example

@@ -1,0 +1,19 @@
+{
+    "navigation": {
+      "settings": "Settings",
+      "emergency": "Emergency",
+      "camera": "Camera",
+      "location": "Location",
+      "profile": "Profile"
+    },
+    "camera": {
+      "processing": "Processing text...",
+      "noText": "No text detected",
+      "tapToScan": "Tap to scan text"
+    },
+    "settings": {
+      "language": "Language",
+      "downloadPack": "Download Offline Pack",
+      "offlineReady": "Ready for offline use"
+    }
+  }
