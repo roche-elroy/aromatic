@@ -10,8 +10,10 @@ from translation import translate_text
 from depth import get_depth
 from pydantic import BaseModel
 from typing import Dict, List
+from twilio_calls import router as twilio_router
 
 app = FastAPI()
+app.include_router(twilio_router)
 
 # Add CORS middleware
 app.add_middleware(

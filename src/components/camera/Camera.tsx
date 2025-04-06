@@ -5,7 +5,7 @@ import { useTranslation } from "../../context/TranslationContext";
 import { useSpeech } from '../../hooks/useSpeech';
 import { Ionicons } from '@expo/vector-icons';
 
-const SERVER_IP = "192.168.43.22";
+const SERVER_IP = "192.168.1.10";
 
 export default function CameraScreen() {  
   const { targetLanguage } = useTranslation();

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SERVER_IP = "192.168.43.22";
+const SERVER_IP = "192.168.1.10";
 
 type Language = {
   code: string;
