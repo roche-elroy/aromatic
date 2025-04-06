@@ -7,6 +7,8 @@ import axios from 'axios';
 import { useTranslation } from '../../context/TranslationContext';
 import { useFocusEffect } from '@react-navigation/native';
 
+import { SERVER_IP } from '../../lib/constants';
+
 export default function EmergencyScreen() {
   const [contacts, setContacts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +73,7 @@ export default function EmergencyScreen() {
 
   const makeEmergencyCall = async (number: string) => {
     try {
-      const response = await axios.post('http://192.168.1.10:8000/make-call', { to: number });
+      const response = await axios.post(`http://${SERVER_IP}:8000/make-call`, { to: number });
       Alert.alert('Call Started', `Status: ${response.data.status}`);
     } catch (error) {
       console.error('Call failed:', error);
@@ -81,7 +83,7 @@ export default function EmergencyScreen() {
 
   const sendEmergencyMessage = async (number: string, message: string) => {
     try {
-      const response = await axios.post('http://192.168.1.10:8000/send-sms', {
+      const response = await axios.post(`http://${SERVER_IP}:8000/send-sms`, {
         to: number,
         message
       });
@@ -94,7 +96,7 @@ export default function EmergencyScreen() {
 
   const sendWhatsAppMessage = async (number: string, message: string) => {
     try {
-      const response = await axios.post('http://192.168.1.10:8000/send-whatsapp', {
+      const response = await axios.post(`http://${SERVER_IP}:8000/send-whatsapp`, {
         to: number,
         message
       });
