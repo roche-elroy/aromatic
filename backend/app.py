@@ -78,6 +78,8 @@ model = YOLO(MODEL_PATH)
 print("✅ Model loaded successfully")
 
 async def process_frame_detection(frame):
+    if frame is None:
+        return None, "Invalid frame"
     try:
         results = model(frame)[0]
         detected_objects = [model.names[int(box.cls)] for box in results.boxes]
@@ -85,20 +87,27 @@ async def process_frame_detection(frame):
         return results, detection_text
     except Exception as e:
         print(f"❌ Detection error: {str(e)}")
-        return None, None
+        return None, "Detection error"
 
 async def process_frame_depth(frame):
+    if frame is None:
+        return None
     try:
-        return await asyncio.get_event_loop().run_in_executor(
+        depth_result = await asyncio.get_event_loop().run_in_executor(
             depth_executor,
             get_depth,
             frame
         )
+        if isinstance(depth_result, dict):
+            return depth_result
+        return {"depth": depth_result, "confidence": 1.0, "method": "default"}
     except Exception as e:
         print(f"❌ Depth error: {str(e)}")
         return None
 
 async def process_translation(text, target_lang):
+    if not text or not target_lang:
+        return text
     try:
         if target_lang == "en":
             return text
@@ -148,75 +157,91 @@ async def video_stream(websocket: WebSocket):
         
         while True:
             try:
-                # Check if client is active before processing
+                # Check connection state
+                if not websocket.client_state.CONNECTED:
+                    print(f"🔌 Client disconnected: {client_id}")
+                    break
+
+                # Check if client is active
                 if not active_clients[client_id].is_active:
-                    await asyncio.sleep(0.5)  # Reduced CPU usage when inactive
+                    await asyncio.sleep(0.5)
                     continue
 
-                # Receive frame with shorter timeout
-                data = await asyncio.wait_for(
-                    websocket.receive_text(),
-                    timeout=5.0
-                )
-                
-                # Update last active timestamp
+                # Receive frame with timeout
+                try:
+                    data = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    continue
+
+                # Update activity timestamp
                 active_clients[client_id].last_active = datetime.now()
-                
-                # Process image only if client is active
-                frame_data = base64.b64decode(data)
-                np_frame = np.frombuffer(frame_data, np.uint8)
-                frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
 
-                if frame is None:
+                # Validate and decode frame
+                try:
+                    frame_data = base64.b64decode(data)
+                    np_frame = np.frombuffer(frame_data, np.uint8)
+                    frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
+                    if frame is None:
+                        print(f"⚠️ Invalid frame received: {client_id}")
+                        continue
+                except Exception as e:
+                    print(f"❌ Frame decode error: {str(e)}")
                     continue
 
-                # Replace the relevant section in the video_stream function
-                # Process tasks concurrently
-                detection_task = asyncio.create_task(process_frame_detection(frame))
-                depth_task = asyncio.create_task(process_frame_depth(frame))
-                
-                # Wait for detection and depth results
-                results, detection_text = await detection_task
-                depth_result = await depth_task
-
-                if results is not None and active_clients[client_id].is_active:
-                    # Check if depth_result is valid
-                    depth_info = ""
-                    if isinstance(depth_result, dict) and depth_result.get("depth"):
-                        depth_info = f" | Distance: {depth_result['depth']:.1f}cm"
+                # Process frame
+                try:
+                    detection_task = asyncio.create_task(process_frame_detection(frame))
+                    depth_task = asyncio.create_task(process_frame_depth(frame))
                     
-                    # Combine detection text with depth info
-                    full_text = detection_text + depth_info if detection_text else "No objects detected"
-                    
-                    # Process translation concurrently
-                    translated_text = await process_translation(full_text, target_lang)
+                    results, detection_text = await detection_task
+                    depth_result = await depth_task
 
-                    # Send response with depth information
-                    await websocket.send_json({
-                        "depth": depth_result.get("depth") if isinstance(depth_result, dict) else None,
-                        "confidence": depth_result.get("confidence", 0) if isinstance(depth_result, dict) else 0,
-                        "method": depth_result.get("method", "none") if isinstance(depth_result, dict) else "none",
-                        "translated_text": translated_text
-                    })
+                    if results is not None and active_clients[client_id].is_active:
+                        depth_info = ""
+                        if isinstance(depth_result, dict) and depth_result.get("depth"):
+                            depth_info = f" | Distance: {depth_result['depth']:.1f}cm"
+                        
+                        full_text = detection_text + depth_info if detection_text else "No objects detected"
+                        translated_text = await process_translation(full_text, target_lang)
 
-            except asyncio.TimeoutError:
-                continue
+                        # Send response
+                        if websocket.client_state.CONNECTED:
+                            await websocket.send_json({
+                                "depth": depth_result.get("depth") if isinstance(depth_result, dict) else None,
+                                "confidence": depth_result.get("confidence", 0) if isinstance(depth_result, dict) else 0,
+                                "method": depth_result.get("method", "none") if isinstance(depth_result, dict) else "none",
+                                "translated_text": translated_text,
+                                "status": "success"
+                            })
+                except Exception as e:
+                    print(f"❌ Processing error: {str(e)}")
+                    if websocket.client_state.CONNECTED:
+                        await websocket.send_json({
+                            "error": str(e),
+                            "status": "error"
+                        })
+                    continue
+
             except WebSocketDisconnect:
-                print("Client disconnected")
+                print(f"🔒 WebSocket disconnect: {client_id}")
                 break
             except Exception as e:
-                print(f"❌ Processing error: {str(e)}")
-                if not websocket.client_state.CONNECTED:
-                    break
-                continue
+                print(f"❌ Unexpected error: {str(e)}")
+                break
 
     finally:
         # Cleanup
-        if client_id in active_clients:
-            del active_clients[client_id]
-        if client_id in processing_queues:
-            del processing_queues[client_id]
-        print(f"🧹 Connection cleaned up: {client_id}")
+        try:
+            if client_id in active_clients:
+                del active_clients[client_id]
+            if client_id in processing_queues:
+                del processing_queues[client_id]
+            print(f"🧹 Connection cleaned up: {client_id}")
+        except Exception as e:
+            print(f"❌ Cleanup error: {str(e)}")
 
 # Add graceful shutdown
 @app.on_event("shutdown")
@@ -245,15 +270,21 @@ async def cleanup_inactive_clients():
             inactive_threshold = timedelta(seconds=30)
             
             for client_id, state in list(active_clients.items()):
-                if (current_time - state.last_active) > inactive_threshold:
-                    print(f"🧹 Removing inactive client: {client_id}")
-                    del active_clients[client_id]
-                    if client_id in processing_queues:
-                        del processing_queues[client_id]
+                try:
+                    if (current_time - state.last_active) > inactive_threshold:
+                        print(f"🧹 Removing inactive client: {client_id}")
+                        if client_id in active_clients:
+                            del active_clients[client_id]
+                        if client_id in processing_queues:
+                            del processing_queues[client_id]
+                except Exception as e:
+                    print(f"❌ Client cleanup error: {client_id} - {str(e)}")
+                    continue
+            
+            await asyncio.sleep(10)
         except Exception as e:
-            print(f"❌ Cleanup error: {str(e)}")
-        
-        await asyncio.sleep(10)  # Run cleanup every 10 seconds
+            print(f"❌ Main cleanup error: {str(e)}")
+            await asyncio.sleep(10)
 
 # Add to your startup events
 @app.on_event("startup")
