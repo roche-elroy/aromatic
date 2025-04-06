@@ -23,7 +23,7 @@ This application demonstrates real-time object detection using React Native (Exp
 
 # Note 4:
 
-    `python setup.py` and `npm install` in termianl to install required dependencies
+    `python setup.py` and `npm install` in terminal to install required dependencies
 
 # Note 5:
 
