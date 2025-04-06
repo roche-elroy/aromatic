@@ -4,6 +4,7 @@ import { useBiometricAuth } from '../../hooks/useBiometricAuth';
 import { useTranslation } from '../../context/TranslationContext';
 import { useSpeech } from '../../hooks/useSpeech';
 import { Ionicons } from '@expo/vector-icons';
+import { PinAuth } from './PinAuth';
 
 interface BiometricAuthProps {
   onAuthSuccess: () => void;
@@ -30,20 +31,7 @@ export const BiometricAuth: React.FC<BiometricAuthProps> = ({ onAuthSuccess }) =
     : 'Welcome to VisionMate';
 
   if (!isBiometricAvailable) {
-    const warningText = targetLanguage === 'hi'
-      ? 'बायोमेट्रिक प्रमाणीकरण इस डिवाइस पर उपलब्ध नहीं है।'
-      : 'Biometric authentication is not available on this device.';
-
-    return (
-      <View style={styles.container}>
-        <TouchableOpacity
-          onPress={() => speakText(warningText)}
-          style={styles.warningContainer}
-        >
-          <Text style={styles.warning}>{warningText}</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return <PinAuth onAuthSuccess={onAuthSuccess} />;
   }
 
   return (
