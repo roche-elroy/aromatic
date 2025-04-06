@@ -1,4 +1,5 @@
 import { CameraPictureOptions, CameraType, CameraView, PermissionStatus } from "expo-camera";
+import { AppState, AppStateStatus } from "react-native";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";
@@ -24,6 +25,8 @@ export default function CameraScreen() {
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const connectionAttemptRef = useRef<number>(0);
   const speakText = useSpeech();
+  const appState = useRef(AppState.currentState);
+  const [isActive, setIsActive] = useState(true);
 
   function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
@@ -116,7 +119,11 @@ export default function CameraScreen() {
   }, [targetLanguage, closeWebSocket]);
 
   const startStreaming = async () => {
-    while (isStreaming.current && wsRef.current?.readyState === WebSocket.OPEN) {
+    while (
+      isActive && 
+      isStreaming.current && 
+      wsRef.current?.readyState === WebSocket.OPEN
+    ) {
       try {
         if (!cameraRef.current) continue;
 
@@ -128,7 +135,12 @@ export default function CameraScreen() {
 
         const photo = await cameraRef.current.takePictureAsync(pictureOptions);
 
-        if (isStreaming.current && wsRef.current?.readyState === WebSocket.OPEN && photo?.base64) {
+        if (
+          isActive && 
+          isStreaming.current && 
+          wsRef.current?.readyState === WebSocket.OPEN && 
+          photo?.base64
+        ) {
           wsRef.current.send(photo.base64);
         }
       } catch (err) {
@@ -139,10 +151,42 @@ export default function CameraScreen() {
   };
 
   useEffect(() => {
-    console.log(`📢 Language changed to: ${targetLanguage}`);
-    connectWebSocket();
-    return closeWebSocket;
-  }, [targetLanguage, connectWebSocket, closeWebSocket]);
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (
+      appState.current.match(/inactive|background/) && 
+      nextAppState === 'active'
+    ) {
+      // App came to foreground
+      setIsActive(true);
+      connectWebSocket();
+    } else if (
+      appState.current === 'active' && 
+      nextAppState.match(/inactive|background/)
+    ) {
+      // App went to background
+      setIsActive(false);
+      closeWebSocket();
+    }
+
+    appState.current = nextAppState;
+  };
+
+  useEffect(() => {
+    if (isActive) {
+      console.log(`📢 Language changed to: ${targetLanguage}`);
+      connectWebSocket();
+      return closeWebSocket;
+    } else {
+      closeWebSocket();
+    }
+  }, [targetLanguage, isActive, connectWebSocket, closeWebSocket]);
 
   const handleCameraPress = () => {
     if (detectionResult) {
@@ -212,5 +256,5 @@ export default function CameraScreen() {
       </TouchableOpacity>
     </View>  
   );  
-}  
+}
 
