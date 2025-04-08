@@ -8,8 +8,9 @@ import { useTranslation } from '../../context/TranslationContext';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { SERVER_IP } from '../../lib/constants';
+import FallDetection from '../fallDetection/FallDetection';
 
-export default function EmergencyScreen() {
+const EmergencyScreen: React.FC = () => {
   const [contacts, setContacts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -121,6 +122,7 @@ export default function EmergencyScreen() {
 
   return (
     <View style={styles.container}>
+      <FallDetection />
       <Text style={styles.title}>{translations.title}</Text>
       <Text style={styles.description}>{translations.description}</Text>
 
@@ -160,7 +162,7 @@ export default function EmergencyScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1, padding: 20, backgroundColor: '#f0f0f0',
+    flex: 1, padding: 16, backgroundColor: '#f0f0f0',
   },
   title: {
     fontSize: 24, fontWeight: 'bold', color: '#333', marginBottom: 10, textAlign: 'center'
@@ -198,3 +200,5 @@ const styles = StyleSheet.create({
     flex: 1, justifyContent: 'center', alignItems: 'center'
   },
 });
+
+export default EmergencyScreen;
