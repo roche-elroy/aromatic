@@ -39,7 +39,8 @@
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "~0.19.13",
     "tailwindcss": "^4.0.12",
-    "expo-sensors": "~14.0.2"
+    "expo-sensors": "~14.0.2",
+    "expo-system-ui": "~4.0.9"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
