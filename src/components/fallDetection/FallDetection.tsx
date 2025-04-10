@@ -1,35 +1,32 @@
 import React from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useFallDetection } from '../../hooks/useFallDetection';
+import { useTranslation } from '../../context/TranslationContext';
+import { useSpeech } from '../../hooks/useSpeech';
 
-const FallDetection: React.FC = () => {
-  const handleFallDetected = () => {
-    Alert.alert(
-      'Fall Detected!',
-      'Are you okay? Do you need emergency assistance?',
-      [
-        {
-          text: "I'm OK",
-          style: 'cancel',
-        },
-        {
-          text: 'Get Help',
-          onPress: () => {
-            // TODO: Implement emergency contact/service call
-            console.log('Emergency help requested');
-          },
-          style: 'destructive',
-        },
-      ]
-    );
-  };
+interface FallDetectionProps {
+  onFallDetected: () => Promise<void>;
+}
 
-  const { isMonitoring, accelerometerData } = useFallDetection(handleFallDetected);
+const FallDetection: React.FC<FallDetectionProps> = ({ onFallDetected }) => {
+  const { isMonitoring, accelerometerData } = useFallDetection(onFallDetected);
+  const { translateText } = useTranslation();
+  const speakText = useSpeech();
+  const [translatedText, setTranslatedText] = React.useState({ title: '', status: '' });
+
+  React.useEffect(() => {
+    const updateTranslations = async () => {
+      const title = await translateText('Fall Detection');
+      const status = await translateText(isMonitoring ? 'Active' : 'Inactive');
+      setTranslatedText({ title, status });
+    };
+    updateTranslations();
+  }, [isMonitoring, translateText]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.status}>
-        Fall Detection: {isMonitoring ? 'Active' : 'Inactive'}
+        {translatedText.title}: {translatedText.status}
       </Text>
       <Text style={styles.data}>
         X: {accelerometerData.x.toFixed(2)}

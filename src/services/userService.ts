@@ -2,7 +2,7 @@
 
 import { getFirestore, collection, addDoc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { app } from '../../firebase/config';
+import app  from '../../firebase/config';
 
 const db = getFirestore(app);
 

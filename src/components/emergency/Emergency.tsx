@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, FlatList, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, FlatList, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getEmergencyContacts } from '../../services/userService';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import axios from 'axios';
 import { useTranslation } from '../../context/TranslationContext';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Speech from 'expo-speech';
+import { useSpeech } from '../../hooks/useSpeech';
 
 import { SERVER_IP } from '../../lib/constants';
 import FallDetection from '../fallDetection/FallDetection';
@@ -14,8 +16,10 @@ const EmergencyScreen: React.FC = () => {
   const [contacts, setContacts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { translateText, targetLanguage } = useTranslation();
+  const speakText = useSpeech();
   const [translations, setTranslations] = useState({
     title: 'Emergency Services',
     description: 'Call emergency services immediately',
@@ -72,13 +76,12 @@ const EmergencyScreen: React.FC = () => {
     translateUI();
   }, [targetLanguage, translateText]);
 
-  const makeEmergencyCall = async (number: string) => {
+  const makeEmergencyCall = async (phoneNumber: string) => {
     try {
-      const response = await axios.post(`http://${SERVER_IP}:8000/make-call`, { to: number });
-      Alert.alert('Call Started', `Status: ${response.data.status}`);
+      await Linking.openURL(`tel:${phoneNumber}`);
     } catch (error) {
       console.error('Call failed:', error);
-      Alert.alert('Call Failed', 'Unable to place the call.');
+      Alert.alert('Call Failed', 'Unable to make the emergency call.');
     }
   };
 
@@ -108,6 +111,66 @@ const EmergencyScreen: React.FC = () => {
     }
   };
 
+  const handleFallDetected = async () => {
+    // Stop any existing timeout
+    if (alertTimeoutRef.current) {
+      clearTimeout(alertTimeoutRef.current);
+    }
+
+    // Speak the alert in current language
+    const alertMessage = await translateText('Fall detected! Are you okay?');
+    await speakText(alertMessage);
+
+    // Show alert with countdown
+    Alert.alert(
+      await translateText('Fall Detected!'),
+      await translateText('Are you okay? Automatic emergency call in 20 seconds.'),
+      [
+        {
+          text: await translateText("I'm OK"),
+          onPress: () => {
+            if (alertTimeoutRef.current) {
+              clearTimeout(alertTimeoutRef.current);
+            }
+          },
+          style: 'cancel',
+        },
+        {
+          text: await translateText('Get Help'),
+          onPress: async () => {
+            if (alertTimeoutRef.current) {
+              clearTimeout(alertTimeoutRef.current);
+            }
+            if (contacts.length > 0) {
+              await speakText(await translateText('Calling emergency contact now'));
+              makeEmergencyCall(contacts[0]);
+            }
+          },
+          style: 'destructive',
+        },
+      ],
+      { cancelable: false }
+    );
+
+    // Set timeout for automatic call
+    alertTimeoutRef.current = setTimeout(async () => {
+      if (contacts.length > 0) {
+        const noResponseMessage = await translateText('No response detected. Calling emergency contact.');
+        await speakText(noResponseMessage);
+        makeEmergencyCall(contacts[0]);
+      }
+    }, 20000); // 20 seconds
+  };
+
+  // Clean up timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (loading) {
     return <ActivityIndicator size="large" color="#000" style={styles.loader} />;
   }
@@ -122,7 +185,7 @@ const EmergencyScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <FallDetection />
+      <FallDetection onFallDetected={handleFallDetected} />
       <Text style={styles.title}>{translations.title}</Text>
       <Text style={styles.description}>{translations.description}</Text>
 

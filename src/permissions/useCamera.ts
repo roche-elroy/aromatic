@@ -1,31 +1,48 @@
 import { useCameraPermissions } from 'expo-camera';
-import { Alert, Linking } from 'react-native';
-import Constants from 'expo-constants';
+import { Alert, Linking, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const CAMERA_PERMISSION_KEY = '@camera_permission_status';
 
 export const useCamera = () => {
   const [permission, requestPermission] = useCameraPermissions();
 
   const handlePermissionRequest = async () => {
     try {
+      // Check if we have stored permission
+      const storedPermission = await AsyncStorage.getItem(CAMERA_PERMISSION_KEY);
+      
+      if (storedPermission === 'granted') {
+        return true;
+      }
+
       if (!permission?.granted) {
         const result = await requestPermission();
 
-        // If permission is still denied after request, show settings dialog
-        if (!result.granted) {
-          Alert.alert(
-            'Camera Access Required',
-            'Please enable camera access in Expo Go settings',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { 
-                text: 'Open Settings',
-                onPress: () => Linking.openSettings()
-              }
-            ]
-          );
+        if (result.granted) {
+          await AsyncStorage.setItem(CAMERA_PERMISSION_KEY, 'granted');
+          return true;
         }
-        return result.granted;
+
+        // If permission denied, show settings dialog
+        Alert.alert(
+          'Camera Access Required',
+          'Please enable camera access in your device settings',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Open Settings',
+              onPress: () => {
+                Platform.OS === 'ios' 
+                  ? Linking.openURL('app-settings:')
+                  : Linking.openSettings();
+              }
+            }
+          ]
+        );
+        return false;
       }
+
       return true;
     } catch (error) {
       console.error('Camera permission error:', error);
