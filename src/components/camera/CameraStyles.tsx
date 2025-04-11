@@ -102,14 +102,6 @@ export const styles = StyleSheet.create({
       width: '100%',
       alignItems: 'center',
     },
-    topButtonContainer: {
-      position: 'absolute',
-      top: 40,
-      right: 20,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'flex-end',
-    },
     flashButton: {
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       borderRadius: 30,

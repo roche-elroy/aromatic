@@ -7,7 +7,6 @@ import { useSpeech } from '../../hooks/useSpeech';
 import { useCamera } from '../../permissions/useCamera';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
-import { FlashButton } from './FlashButton';
 import { Camera } from 'expo-camera';
 
 import { styles } from "./CameraStyles";
@@ -29,40 +28,32 @@ export default function CameraScreen() {
   const speakText = useSpeech();
   const appState = useRef(AppState.currentState);
   const [isActive, setIsActive] = useState(true);
-  const [isFlashOn, setIsFlashOn] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
 
   function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
   }
 
-  const handleFlashToggle = async () => {
-    setIsFlashOn(prev => !prev);
-    const message = isFlashOn 
-      ? await translateText('Flash turned off') 
-      : await translateText('Flash turned on');
-    await speakText(message);
+  const handleTorchToggle = async () => {
+    setIsTorchOn(prev => !prev);
+    const message = isTorchOn ? 'Torch turned off' : 'Torch turned on';
+    await speakText(await translateText(message));
   };
 
-  const handleFlashLongPress = async () => {
-    const message = isFlashOn 
-      ? await translateText('Flash is currently on') 
-      : await translateText('Flash is currently off');
-    await speakText(message);
+  const handleTorchLongPress = async () => {
+    const message = isTorchOn ? 'Torch is currently on' : 'Torch is currently off';
+    await speakText(await translateText(message));
   };
 
   const handleCameraFlip = async () => {
     toggleCamera();
-    const message = facing === 'back' 
-      ? await translateText('Switched to front camera') 
-      : await translateText('Switched to back camera');
-    await speakText(message);
+    const message = facing === 'back' ? 'Switched to front camera' : 'Switched to back camera';
+    await speakText(await translateText(message));
   };
 
   const handleCameraLongPress = async () => {
-    const message = facing === 'back' 
-      ? await translateText('Using back camera') 
-      : await translateText('Using front camera');
-    await speakText(message);
+    const message = facing === 'back' ? 'Using back camera' : 'Using front camera';
+    await speakText(await translateText(message));
   };
 
   // Close existing WebSocket connection
@@ -258,8 +249,8 @@ export default function CameraScreen() {
           ref={cameraRef} 
           style={StyleSheet.absoluteFillObject}
           facing={facing}
+          enableTorch={isTorchOn}
           animateShutter={false}
-          flash={isFlashOn ? 'on' : 'off'}
         >
           {!isConnected && (
             <Text style={styles.connectionStatus}>
@@ -278,22 +269,33 @@ export default function CameraScreen() {
               )}
             </View>
           )}
-          <View style={styles.cameraButtonContainer}>
-          <View style={styles.flashButtonContainer}>
-          <FlashButton 
-              isFlashOn={isFlashOn} 
-              onToggleFlash={handleFlashToggle}
-              onLongPress={handleFlashLongPress}
-            />
-          </View>
+          <View style={styles.centerButtonContainer}>
             <TouchableOpacity 
               onPress={handleCameraFlip}
               onLongPress={handleCameraLongPress}
               delayLongPress={500}
               style={styles.cameraButton}
             >
-              <Ionicons name="camera-reverse" size={30} color="white" />
+              <Ionicons 
+                name="camera-reverse" 
+                size={30} 
+                color="white" 
+              />
             </TouchableOpacity>
+            <View style={styles.flashButtonContainer}>
+              <TouchableOpacity 
+                onPress={handleTorchToggle}
+                onLongPress={handleTorchLongPress}
+                delayLongPress={500}
+                style={styles.flashButton}
+              >
+                <Ionicons 
+                  name={isTorchOn ? 'flashlight' : 'flashlight-outline'} 
+                  size={24} 
+                  color="white" 
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </CameraView>
       </TouchableOpacity>
