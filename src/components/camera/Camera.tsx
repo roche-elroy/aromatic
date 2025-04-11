@@ -278,12 +278,14 @@ export default function CameraScreen() {
               )}
             </View>
           )}
-          <View style={[styles.buttonContainer, { flexDirection: 'row', justifyContent: 'space-between' }]}>
-            <FlashButton 
+          <View style={styles.cameraButtonContainer}>
+          <View style={styles.flashButtonContainer}>
+          <FlashButton 
               isFlashOn={isFlashOn} 
               onToggleFlash={handleFlashToggle}
               onLongPress={handleFlashLongPress}
             />
+          </View>
             <TouchableOpacity 
               onPress={handleCameraFlip}
               onLongPress={handleCameraLongPress}

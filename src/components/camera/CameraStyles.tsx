@@ -14,11 +14,19 @@ export const styles = StyleSheet.create({
     camera: {
       flex: 1,
     },
-    buttonContainer: { 
+    cameraButtonContainer: { 
       position: 'absolute',
       bottom: 60,
       width: '100%',
       alignItems: 'center',
+    },
+    flashButtonContainer: {
+      position: 'absolute',
+      
+      right: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
     },
     detectionText: {
       color: '#fff',
