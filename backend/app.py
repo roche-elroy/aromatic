@@ -82,12 +82,26 @@ async def process_frame_detection(frame):
         return None, "Invalid frame"
     try:
         results = model(frame)[0]
-        detected_objects = [model.names[int(box.cls)] for box in results.boxes]
+        detected_objects = []
+        bounding_box = None
+        
+        for box in results.boxes:
+            label = model.names[int(box.cls)]
+            detected_objects.append(label)
+            if bounding_box is None:  # Track the first detected object
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                bounding_box = {
+                    "x1": x1,
+                    "y1": y1,
+                    "x2": x2,
+                    "y2": y2
+                }
+        
         detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
-        return results, detection_text
+        return results, detection_text, bounding_box
     except Exception as e:
         print(f"❌ Detection error: {str(e)}")
-        return None, "Detection error"
+        return None, "Detection error", None
 
 async def process_frame_depth(frame):
     if frame is None:
@@ -196,7 +210,7 @@ async def video_stream(websocket: WebSocket):
                     detection_task = asyncio.create_task(process_frame_detection(frame))
                     depth_task = asyncio.create_task(process_frame_depth(frame))
                     
-                    results, detection_text = await detection_task
+                    results, detection_text, bounding_box = await detection_task
                     depth_result = await depth_task
 
                     if results is not None and active_clients[client_id].is_active:
@@ -211,9 +225,10 @@ async def video_stream(websocket: WebSocket):
                         if websocket.client_state.CONNECTED:
                             await websocket.send_json({
                                 "depth": depth_result.get("depth") if isinstance(depth_result, dict) else None,
-                                "confidence": depth_result.get("confidence", 0) if isinstance(depth_result, dict) else 0,
-                                "method": depth_result.get("method", "none") if isinstance(depth_result, dict) else "none",
+                                "confidence": depth_result.get("confidence", 0),
+                                "method": depth_result.get("method", "none"),
                                 "translated_text": translated_text,
+                                "bounding_box": bounding_box,  # Add this line
                                 "status": "success"
                             })
                 except Exception as e:

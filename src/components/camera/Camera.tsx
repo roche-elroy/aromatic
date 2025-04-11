@@ -1,13 +1,16 @@
 import { CameraPictureOptions, CameraType, CameraView, PermissionStatus } from "expo-camera";
 import { AppState, AppStateStatus } from "react-native";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
 import { useTranslation } from "../../context/TranslationContext";
 import { useSpeech } from '../../hooks/useSpeech';
 import { useCamera } from '../../permissions/useCamera';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
 import { Camera } from 'expo-camera';
+import { CameraQuadrants } from './CameraQuadrants';
+import { getQuadrant, getQuadrantDescription, Quadrant } from '../../utils/quadrantDetection';
+import { BoundingBox } from './BoundingBox';
 
 import { styles } from "./CameraStyles";
 
@@ -29,6 +32,9 @@ export default function CameraScreen() {
   const appState = useRef(AppState.currentState);
   const [isActive, setIsActive] = useState(true);
   const [isTorchOn, setIsTorchOn] = useState(false);
+  const [activeQuadrant, setActiveQuadrant] = useState<Quadrant>(null);
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const [boundingBox, setBoundingBox] = useState<any>(null);
 
   function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
@@ -109,6 +115,11 @@ export default function CameraScreen() {
     ws.onmessage = (event) => {
       try {
         const result = JSON.parse(event.data);
+        if (result.bounding_box) {
+          setBoundingBox(result.bounding_box);
+          const quadrant = getQuadrant(result.bounding_box, screenWidth);
+          setActiveQuadrant(quadrant);
+        }
         if (result.translated_text) {
           setDetectionResult(result.translated_text);
         }
@@ -218,6 +229,13 @@ export default function CameraScreen() {
     }
   };
 
+  const handleQuadrantPress = (quadrant: 'left' | 'right') => {
+    const desc = getQuadrantDescription(quadrant, targetLanguage);
+    if (desc) {
+      speakText(desc);
+    }
+  };
+
   // console.log(`hasPermission state: ${hasPermission}`);
 
   // Show permission UI if not granted.
@@ -252,6 +270,17 @@ export default function CameraScreen() {
           enableTorch={isTorchOn}
           animateShutter={false}
         >
+          <CameraQuadrants 
+            activeQuadrant={activeQuadrant} 
+            onQuadrantPress={handleQuadrantPress}
+          />
+          {boundingBox && (
+            <BoundingBox 
+              box={boundingBox}
+              screenWidth={screenWidth}
+              screenHeight={screenHeight}
+            />
+          )}
           {!isConnected && (
             <Text style={styles.connectionStatus}>
               {targetLanguage === 'hi' ? 'पुन: कनेक्ट हो रहा है...' : 'Reconnecting...'}
