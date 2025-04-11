@@ -1,7 +1,7 @@
 # Instructions
 
-- Add all the api keys and other credentials inside a new file named .env
-- Change SERVER IP in src/lib/constants.ts
+- Refer to the .env.example and add all the api keys and other credentials inside a new file named .env
+- Run python.setup.py 
 
 Enjoy the rest of the show
 
