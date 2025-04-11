@@ -52,6 +52,10 @@ export const styles = StyleSheet.create({
       backgroundColor: 'rgba(0,0,0,0.74)',
       borderRadius: 50,
       padding: 15,
+      width: 70,
+      height: 70,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     proximityWarning: {
       color: '#ff4444',
@@ -83,5 +87,25 @@ export const styles = StyleSheet.create({
       fontSize: 16,
       fontWeight: '600',
       textAlign: 'center',
+    },
+    centerButtonContainer: { 
+      position: 'absolute',
+      bottom: 60,
+      width: '100%',
+      alignItems: 'center',
+    },
+    topButtonContainer: {
+      position: 'absolute',
+      top: 40,
+      right: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+    },
+    flashButton: {
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      borderRadius: 30,
+      padding: 12,
+      margin: 10,
     },
   });

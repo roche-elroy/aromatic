@@ -1,32 +1,33 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { styles } from './CameraStyles';
 
 interface FlashButtonProps {
     isFlashOn: boolean;
     onToggleFlash: () => void;
+    onLongPress: () => void;
+    style?: any;
 }
 
-export const FlashButton: React.FC<FlashButtonProps> = ({ isFlashOn, onToggleFlash }) => {
+export const FlashButton: React.FC<FlashButtonProps> = ({ 
+    isFlashOn, 
+    onToggleFlash,
+    onLongPress,
+    style 
+}) => {
     return (
         <TouchableOpacity 
-          onPress={onToggleFlash}
-          style={styles.flashButton}
+            onPress={onToggleFlash}
+            onLongPress={onLongPress}
+            delayLongPress={500}
+            style={[styles.flashButton, style]}
         >
-          <Ionicons 
-            name={isFlashOn ? 'flash' : 'flash-off'} 
-            size={30} 
-            color="white" 
-          />
+            <Ionicons 
+                name={isFlashOn ? 'flash' : 'flash-off'} 
+                size={24} 
+                color="white" 
+            />
         </TouchableOpacity>
     );
-}
-
-const styles = StyleSheet.create({
-    flashButton: {
-        margin: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: 30,
-        padding: 10,
-    },
-})
+};
