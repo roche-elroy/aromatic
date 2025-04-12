@@ -27,6 +27,22 @@ export const getEmergencyContacts = async (): Promise<string[]> => {
   return snapshot.docs.map(doc => doc.data().number);
 };
 
+export const getDefaultContact = async (): Promise<string> => {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) throw new Error("User not authenticated");
+
+  const q = query(collection(db, 'contacts'), where('uid', '==', user.uid), where('defaultContact', '!=', null));
+
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) {
+    throw new Error("No default contact found");
+  }
+
+  return snapshot.docs[0].data().number;
+};
+
 export const deleteEmergencyContact = async (contact: string) => {
   const user = getAuth().currentUser;
   if (!user) throw new Error("User not authenticated");

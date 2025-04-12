@@ -23,6 +23,7 @@ import {
   getEmergencyContacts,
 } from "../../services/userService";
 import { useTranslation } from "../../context/TranslationContext";
+import { doc, getFirestore, updateDoc, collection, where, getDocs, query } from 'firebase/firestore';
 
 export default function Profile() {
   const auth = getAuth();
@@ -110,10 +111,54 @@ export default function Profile() {
   };
 
   const handleAddContact = async () => {
+    const auth = getAuth();
+    const contactId = auth.currentUser?.uid; // Safely get user ID
     if (!input.trim()) return;
+  
     try {
       await addEmergencyContact(input.trim());
       setInput("");
+  
+      Alert.alert("Do you want it to be a default number?", "", [
+        {
+          text: "Yes",
+          onPress: async () => {
+            try {
+              const db = getFirestore();
+              const auth = getAuth();
+              const currentUser = auth.currentUser;
+          
+              if (!currentUser) throw new Error("User not authenticated");
+          
+              // 🔍 Find the contact doc with this number and current user
+              const q = query(
+                collection(db, "contacts"),
+                where("uid", "==", currentUser.uid),
+                where("number", "==", input.trim())
+              );
+          
+              const snapshot = await getDocs(q);
+          
+              if (!snapshot.empty) {
+                const contactDoc = snapshot.docs[0];
+                // ✅ Add the 'defaultContact' field to this doc
+                await updateDoc(doc(db, "contacts", contactDoc.id), {
+                  defaultContact: input.trim(),
+                });
+          
+                console.log("Default contact field added to contact!");
+              } else {
+                console.warn("No contact found to mark as default.");
+              }
+            } catch (error) {
+              console.error("Error saving default contact: ", error);
+            }
+          }
+          
+        },
+        { text: "No" },
+      ]);
+  
       loadContacts();
     } catch (error: any) {
       Alert.alert("Error", error.message);
