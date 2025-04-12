@@ -40,7 +40,9 @@
     "react-native": "0.76.9",
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "~0.19.13",
-    "tailwindcss": "^4.0.12"
+    "tailwindcss": "^4.0.12",
+    "expo-location": "~18.0.10",
+    "expo-linking": "~7.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
