@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from '../../context/TranslationContext';
 
 export default function SettingsScreen() {
   const { targetLanguage, setTargetLanguage, supportedLanguages, translateText } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [translations, setTranslations] = useState({
     title: 'Translation Settings',
     label: 'Select Language:',
     languages: {} as Record<string, string>
   });
 
-  // Translate UI elements when language changes
   useEffect(() => {
     translateUIElements();
   }, [targetLanguage]);
@@ -29,12 +30,10 @@ export default function SettingsScreen() {
 
     setIsLoading(true);
     try {
-      // Translate static text
       const translatedTitle = await translateText('Translation Settings');
       const translatedLabel = await translateText('Select Language:');
-
-      // Translate language names
       const translatedLanguages: Record<string, string> = {};
+
       for (const lang of supportedLanguages) {
         translatedLanguages[lang.code] = await translateText(lang.name);
       }
@@ -60,10 +59,28 @@ export default function SettingsScreen() {
     }
   };
 
-  // Get translated language name or fall back to original
   const getLanguageName = (lang: { code: string; name: string }) => {
     if (targetLanguage === 'en') return lang.name;
     return translations.languages[lang.code] || lang.name;
+  };
+
+  const openCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Camera access is needed to take pictures.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+      console.log('Image URI:', result.assets[0].uri);
+      // You can pass this image to MediaPipe here
+    }
   };
 
   return (
@@ -92,6 +109,12 @@ export default function SettingsScreen() {
             </Picker>
           )}
         </View>
+
+        <Button title="Capture Image" onPress={openCamera} color="#007bff" />
+
+        {imageUri && (
+          <Image source={{ uri: imageUri }} style={styles.previewImage} />
+        )}
       </View>
     </ScrollView>
   );
@@ -126,5 +149,12 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginVertical: 20,
+  },
+  previewImage: {
+    marginTop: 15,
+    width: '100%',
+    height: 300,
+    borderRadius: 10,
+    resizeMode: 'cover',
   }
 });
