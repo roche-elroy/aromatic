@@ -171,20 +171,17 @@ async def video_stream(websocket: WebSocket):
         
         while True:
             try:
-                # Check connection state
                 if not websocket.client_state.CONNECTED:
                     print(f"🔌 Client disconnected: {client_id}")
                     break
 
-                # Check if client is active
                 if not active_clients[client_id].is_active:
                     await asyncio.sleep(0.5)
                     continue
 
-                # Receive frame with timeout
                 try:
                     data = await asyncio.wait_for(
-                        websocket.receive_text(),
+                        websocket.receive_json(),  # Changed to receive_json
                         timeout=5.0
                     )
                 except asyncio.TimeoutError:
@@ -193,9 +190,13 @@ async def video_stream(websocket: WebSocket):
                 # Update activity timestamp
                 active_clients[client_id].last_active = datetime.now()
 
+                # Check if we should process this frame
+                if not data.get('shouldProcess', False):
+                    continue
+
                 # Validate and decode frame
                 try:
-                    frame_data = base64.b64decode(data)
+                    frame_data = base64.b64decode(data['frame'])
                     np_frame = np.frombuffer(frame_data, np.uint8)
                     frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
                     if frame is None:
@@ -205,7 +206,7 @@ async def video_stream(websocket: WebSocket):
                     print(f"❌ Frame decode error: {str(e)}")
                     continue
 
-                # Process frame
+                # Process frame only if shouldProcess is true
                 try:
                     detection_task = asyncio.create_task(process_frame_detection(frame))
                     depth_task = asyncio.create_task(process_frame_depth(frame))
@@ -221,14 +222,13 @@ async def video_stream(websocket: WebSocket):
                         full_text = detection_text + depth_info if detection_text else "No objects detected"
                         translated_text = await process_translation(full_text, target_lang)
 
-                        # Send response
                         if websocket.client_state.CONNECTED:
                             await websocket.send_json({
                                 "depth": depth_result.get("depth") if isinstance(depth_result, dict) else None,
                                 "confidence": depth_result.get("confidence", 0),
                                 "method": depth_result.get("method", "none"),
                                 "translated_text": translated_text,
-                                "bounding_box": bounding_box,  # Add this line
+                                "bounding_box": bounding_box,
                                 "status": "success"
                             })
                 except Exception as e:
