@@ -75,7 +75,7 @@ export default function Profile() {
       try {
         const translated: Record<string, string> = {};
         for (const key in uiStrings) {
-          translated[key] = await translateText(uiStrings[key]);
+          translated[key] = await translateText(uiStrings[key as keyof typeof uiStrings]);
         }
         setTranslations(translated);
       } catch (error) {
