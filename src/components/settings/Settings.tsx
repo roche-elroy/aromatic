@@ -112,24 +112,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handlePitchChange = async (value: number) => {
-    setPitch(value);
-    try {
-      await AsyncStorage.setItem('speech_pitch', value.toString());
-    } catch (error) {
-      console.error('Error saving pitch:', error);
-    }
-  };
-
-  const handleRateChange = async (value: number) => {
-    setRate(value);
-    try {
-      await AsyncStorage.setItem('speech_rate', value.toString());
-    } catch (error) {
-      console.error('Error saving rate:', error);
-    }
-  };
-
   const getLanguageName = (lang: { code: string; name: string }) => {
     if (targetLanguage === 'en') return lang.name;
     return translations.languages[lang.code] || lang.name;
