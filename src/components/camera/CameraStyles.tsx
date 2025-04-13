@@ -19,14 +19,17 @@ export const styles = StyleSheet.create({
       bottom: 60,
       width: '100%',
       alignItems: 'center',
+      zIndex: 999, // Add this
+      elevation: 999, // Add this for Android
     },
     flashButtonContainer: {
       position: 'absolute',
-      
       right: 10,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'flex-end',
+      zIndex: 999, // Add this
+      elevation: 999, // Add this for Android
     },
     detectionText: {
       color: '#fff',
@@ -65,6 +68,8 @@ export const styles = StyleSheet.create({
       height: 70,
       justifyContent: 'center',
       alignItems: 'center',
+      zIndex: 999, // Add this
+      elevation: 999, // Add this for Android
     },
     proximityWarning: {
       color: '#ff4444',
@@ -102,11 +107,15 @@ export const styles = StyleSheet.create({
       bottom: 60,
       width: '100%',
       alignItems: 'center',
+      zIndex: 999, // Add this
+      elevation: 999, // Add this for Android
     },
     flashButton: {
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       borderRadius: 30,
       padding: 12,
       margin: 10,
+      zIndex: 999, // Add this
+      elevation: 999, // Add this for Android
     },
   });
