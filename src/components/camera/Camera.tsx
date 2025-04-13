@@ -1,11 +1,10 @@
-import { CameraPictureOptions, CameraType, CameraView, PermissionStatus } from "expo-camera";
+import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { AppState, AppStateStatus } from "react-native";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Button, Alert, Linking, Platform } from "react-native";
 import * as Speech from 'expo-speech';
 import { useTranslation } from "../../context/TranslationContext";
 import { useSpeech } from '../../hooks/useSpeech';
-import { useCamera } from '../../permissions/useCamera';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
 import { Camera } from 'expo-camera';
@@ -17,14 +16,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { styles } from "./CameraStyles";
 
 export default function CameraScreen() {  
+  const [permission, requestPermission] = useCameraPermissions();
   const { targetLanguage, translateText } = useTranslation();
-  const { hasPermission, requestPermission } = useCamera();
+  const [facing, setFacing] = useState<CameraType>("back");
   const [detectionResult, setDetectionResult] = useState<string>("");
   const [depthValue, setDepthValue] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [facing, setFacing] = useState<CameraType>("back");
   const [isObjectClose, setIsObjectClose] = useState(false);
-  const PROXIMITY_THRESHOLD = 0.1; // 75cm threshold (update as needed)
+  const PROXIMITY_THRESHOLD = 0.1;
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);
@@ -39,6 +38,67 @@ export default function CameraScreen() {
   const [boundingBox, setBoundingBox] = useState<any>(null);
   const [isScreenFocused, setIsScreenFocused] = useState(false);
   const shouldProcessFrames = useRef<boolean>(false);
+
+  const handlePermissions = async () => {
+    const { status, canAskAgain } = await Camera.getCameraPermissionsAsync();
+    
+    if (status === 'denied' && !canAskAgain) {
+      // If permission is denied and can't ask again, redirect to settings
+      Alert.alert(
+        'Camera Permission Required',
+        'Please enable camera access in your device settings to use this feature.',
+        [
+          { 
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              if (Platform.OS === 'ios') {
+                Linking.openURL('app-settings:');
+              } else {
+                Linking.openSettings();
+              }
+            }
+          }
+        ]
+      );
+      return false;
+    } else if (status !== 'granted') {
+      // First time asking or can ask again
+      const { status: newStatus } = await requestPermission();
+      if (newStatus !== 'granted') {
+        // If user denies, show settings alert
+        Alert.alert(
+          'Camera Permission Required',
+          'Please enable camera access in your device settings to use this feature.',
+          [
+            { 
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                if (Platform.OS === 'ios') {
+                  Linking.openURL('app-settings:');
+                } else {
+                  Linking.openSettings();
+                }
+              }
+            }
+          ]
+        );
+        return false;
+      }
+    }
+    return true;
+  };
+
+  useEffect(() => {
+    handlePermissions();
+  }, []);
 
   function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
@@ -282,27 +342,7 @@ export default function CameraScreen() {
       speakText(desc);
     }
   };
-
-  // console.log(`hasPermission state: ${hasPermission}`);
-
-  // Show permission UI if not granted.
-  if (!hasPermission) {
-    return (
-      <View style={styles.permissionContainer}>
-        <TouchableOpacity 
-          style={styles.permissionButton}
-          activeOpacity={0.6}
-          onPress={requestPermission}
-        >
-          <Text style={styles.permissionButtonText}>
-            {targetLanguage === 'hi' ? 'अनुमति दें' : 'Grant Permission'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // Main camera view.
+  // // Main camera view.
   return (  
     <View style={styles.container}>  
       <TouchableOpacity 

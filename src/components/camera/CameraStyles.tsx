@@ -55,6 +55,7 @@ export const styles = StyleSheet.create({
       fontSize: 16,
       textAlign: 'center',
       marginBottom: 20,
+      paddingHorizontal: 20
     },
     cameraButton: {
       backgroundColor: 'rgba(0,0,0,0.74)',
