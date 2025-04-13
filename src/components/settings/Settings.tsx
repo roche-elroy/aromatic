@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert, TextInput } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from '../../context/TranslationContext';
@@ -7,7 +7,8 @@ import { useTranslation } from '../../context/TranslationContext';
 export default function SettingsScreen() {
   const { targetLanguage, setTargetLanguage, supportedLanguages, translateText } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [personName, setPersonName] = useState('');
+  const [imageUris, setImageUris] = useState<{ name: string; uri: string }[]>([]);
   const [translations, setTranslations] = useState({
     title: 'Translation Settings',
     label: 'Select Language:',
@@ -64,30 +65,41 @@ export default function SettingsScreen() {
     return translations.languages[lang.code] || lang.name;
   };
 
-  const openCamera = async () => {
+  const openCameraMultiple = async () => {
+    if (!personName.trim()) {
+      Alert.alert('Missing Name', 'Please enter a name before capturing images.');
+      return;
+    }
+
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission required', 'Camera access is needed to take pictures.');
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.7,
-    });
+    let captured = 0;
+    while (captured < 15) {
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.7,
+      });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
-      console.log('Image URI:', result.assets[0].uri);
-      // You can pass this image to MediaPipe here
+      if (result.canceled || result.assets.length === 0) {
+        break; // Stop if user cancels
+      }
+
+      const newUri = result.assets[0].uri;
+      setImageUris((prev) => [...prev, { name: personName.trim(), uri: newUri }]);
+      captured++;
     }
+
+    Alert.alert('Capture Complete', `${captured} images captured for ${personName.trim()}`);
   };
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{translations.title}</Text>
-        
+
         <View style={styles.pickerContainer}>
           <Text style={styles.label}>{translations.label}</Text>
           {isLoading ? (
@@ -110,10 +122,24 @@ export default function SettingsScreen() {
           )}
         </View>
 
-        <Button title="Capture Image" onPress={openCamera} color="#007bff" />
+        <TextInput
+          style={styles.input}
+          placeholder="Enter person's name"
+          value={personName}
+          onChangeText={setPersonName}
+        />
 
-        {imageUri && (
-          <Image source={{ uri: imageUri }} style={styles.previewImage} />
+        <Button title="Capture 15 Images" onPress={openCameraMultiple} color="#007bff" />
+
+        {imageUris.length > 0 && (
+          <View style={styles.imageGallery}>
+            {imageUris.map((item, index) => (
+              <View key={index} style={styles.imageWrapper}>
+                <Image source={{ uri: item.uri }} style={styles.previewImage} />
+                <Text style={styles.imageLabel}>{item.name}</Text>
+              </View>
+            ))}
+          </View>
         )}
       </View>
     </ScrollView>
@@ -150,11 +176,32 @@ const styles = StyleSheet.create({
   loader: {
     marginVertical: 20,
   },
-  previewImage: {
+  input: {
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  imageGallery: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     marginTop: 15,
-    width: '100%',
-    height: 300,
+  },
+  imageWrapper: {
+    alignItems: 'center',
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  previewImage: {
+    width: 100,
+    height: 100,
     borderRadius: 10,
-    resizeMode: 'cover',
-  }
+  },
+  imageLabel: {
+    fontSize: 12,
+    marginTop: 5,
+    textAlign: 'center',
+  },
 });
