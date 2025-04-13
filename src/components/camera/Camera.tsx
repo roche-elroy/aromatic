@@ -1,25 +1,29 @@
-import { CameraPictureOptions, CameraType, CameraView, PermissionStatus } from "expo-camera";
+import { CameraPictureOptions, CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { AppState, AppStateStatus } from "react-native";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Button, Alert, Linking, Platform } from "react-native";
+import * as Speech from 'expo-speech';
 import { useTranslation } from "../../context/TranslationContext";
 import { useSpeech } from '../../hooks/useSpeech';
-import { useCamera } from '../../permissions/useCamera';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
 import { Camera } from 'expo-camera';
+import { CameraQuadrants } from './CameraQuadrants';
+import { getQuadrant, getQuadrantDescription, Quadrant } from '../../utils/quadrantDetection';
+import { BoundingBox } from './BoundingBox';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { styles } from "./CameraStyles";
 
 export default function CameraScreen() {  
+  const [permission, requestPermission] = useCameraPermissions();
   const { targetLanguage, translateText } = useTranslation();
-  const { hasPermission, requestPermission } = useCamera();
+  const [facing, setFacing] = useState<CameraType>("back");
   const [detectionResult, setDetectionResult] = useState<string>("");
   const [depthValue, setDepthValue] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [facing, setFacing] = useState<CameraType>("back");
   const [isObjectClose, setIsObjectClose] = useState(false);
-  const PROXIMITY_THRESHOLD = 10; // 75cm threshold (update as needed)
+  const PROXIMITY_THRESHOLD = 0.1;
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);
@@ -29,6 +33,72 @@ export default function CameraScreen() {
   const appState = useRef(AppState.currentState);
   const [isActive, setIsActive] = useState(true);
   const [isTorchOn, setIsTorchOn] = useState(false);
+  const [activeQuadrant, setActiveQuadrant] = useState<Quadrant>(null);
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const [boundingBox, setBoundingBox] = useState<any>(null);
+  const [isScreenFocused, setIsScreenFocused] = useState(false);
+  const shouldProcessFrames = useRef<boolean>(false);
+
+  const handlePermissions = async () => {
+    const { status, canAskAgain } = await Camera.getCameraPermissionsAsync();
+    
+    if (status === 'denied' && !canAskAgain) {
+      // If permission is denied and can't ask again, redirect to settings
+      Alert.alert(
+        'Camera Permission Required',
+        'Please enable camera access in your device settings to use this feature.',
+        [
+          { 
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              if (Platform.OS === 'ios') {
+                Linking.openURL('app-settings:');
+              } else {
+                Linking.openSettings();
+              }
+            }
+          }
+        ]
+      );
+      return false;
+    } else if (status !== 'granted') {
+      // First time asking or can ask again
+      const { status: newStatus } = await requestPermission();
+      if (newStatus !== 'granted') {
+        // If user denies, show settings alert
+        Alert.alert(
+          'Camera Permission Required',
+          'Please enable camera access in your device settings to use this feature.',
+          [
+            { 
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                if (Platform.OS === 'ios') {
+                  Linking.openURL('app-settings:');
+                } else {
+                  Linking.openSettings();
+                }
+              }
+            }
+          ]
+        );
+        return false;
+      }
+    }
+    return true;
+  };
+
+  useEffect(() => {
+    handlePermissions();
+  }, []);
 
   function toggleCamera() {
     setFacing(current => current === "back" ? "front" : "back");
@@ -109,6 +179,13 @@ export default function CameraScreen() {
     ws.onmessage = (event) => {
       try {
         const result = JSON.parse(event.data);
+        console.log("📥 Received server response:", result);
+        
+        if (result.bounding_box) {
+          setBoundingBox(result.bounding_box);
+          const quadrant = getQuadrant(result.bounding_box, screenWidth);
+          setActiveQuadrant(quadrant);
+        }
         if (result.translated_text) {
           setDetectionResult(result.translated_text);
         }
@@ -116,7 +193,6 @@ export default function CameraScreen() {
           setDepthValue(result.depth);
           const isClose = result.depth < PROXIMITY_THRESHOLD;
           
-          // Trigger warning speech only once per change.
           if (isClose && !isObjectClose) {
             const warningText = targetLanguage === 'hi'
               ? 'आप वस्तु के बहुत करीब हैं'
@@ -126,7 +202,7 @@ export default function CameraScreen() {
           setIsObjectClose(isClose);
         }
       } catch (error) {
-        console.error("⚠️ Parse Error:", error);
+        console.error("⚠️ Parse Error:", error, "Raw data:", event.data);
       }
     };
 
@@ -142,6 +218,32 @@ export default function CameraScreen() {
     };
   }, [targetLanguage, closeWebSocket]);
 
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true);
+      shouldProcessFrames.current = true;
+      console.log('📸 Camera screen focused, enabling processing');
+
+      if (!wsRef.current && isActive) {
+        console.log(`📢 Connecting WebSocket: ${targetLanguage}`);
+        connectWebSocket();
+      }
+
+      return () => {
+        setIsScreenFocused(false);
+        shouldProcessFrames.current = false;
+        console.log('📸 Camera screen unfocused, disabling processing');
+        // Don't close websocket, just stop processing
+        Speech.stop();
+        setDetectionResult("");
+        setBoundingBox(null);
+        setActiveQuadrant(null);
+        setDepthValue(null);
+        setIsObjectClose(false);
+      };
+    }, [targetLanguage, isActive])
+  );
+
   const startStreaming = async () => {
     while (
       isActive && 
@@ -149,7 +251,16 @@ export default function CameraScreen() {
       wsRef.current?.readyState === WebSocket.OPEN
     ) {
       try {
-        if (!cameraRef.current) continue;
+        // Only process frames if we're on camera screen
+        if (!shouldProcessFrames.current) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          continue;
+        }
+
+        if (!cameraRef.current) {
+          console.log("📸 No camera reference available");
+          continue;
+        }
 
         const pictureOptions: CameraPictureOptions = {
           base64: true,
@@ -158,14 +269,20 @@ export default function CameraScreen() {
         };
 
         const photo = await cameraRef.current.takePictureAsync(pictureOptions);
+        console.log("📸 Frame captured, size:", photo?.base64?.length || 0);
 
         if (
           isActive && 
           isStreaming.current && 
           wsRef.current?.readyState === WebSocket.OPEN && 
-          photo?.base64
+          photo?.base64 &&
+          shouldProcessFrames.current // Add this check
         ) {
-          wsRef.current.send(photo.base64);
+          wsRef.current.send(JSON.stringify({
+            frame: photo.base64,
+            shouldProcess: true
+          }));
+          console.log("📤 Frame sent to server");
         }
       } catch (err) {
         console.error("🚫 Frame capture error:", err);
@@ -213,31 +330,19 @@ export default function CameraScreen() {
   }, [targetLanguage, isActive, connectWebSocket, closeWebSocket]);
 
   const handleCameraPress = () => {
-    if (detectionResult) {
+    if (detectionResult && isScreenFocused) {
       speakText(detectionResult);
     }
   };
 
-  // console.log(`hasPermission state: ${hasPermission}`);
-
-  // Show permission UI if not granted.
-  if (!hasPermission) {
-    return (
-      <View style={styles.permissionContainer}>
-        <TouchableOpacity 
-          style={styles.permissionButton}
-          activeOpacity={0.6}
-          onPress={requestPermission}
-        >
-          <Text style={styles.permissionButtonText}>
-            {targetLanguage === 'hi' ? 'अनुमति दें' : 'Grant Permission'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // Main camera view.
+  const handleQuadrantPress = (quadrant: 'left' | 'right') => {
+    if (!isScreenFocused) return;
+    const desc = getQuadrantDescription(quadrant, targetLanguage);
+    if (desc) {
+      speakText(desc);
+    }
+  };
+  // // Main camera view.
   return (  
     <View style={styles.container}>  
       <TouchableOpacity 
@@ -252,6 +357,17 @@ export default function CameraScreen() {
           enableTorch={isTorchOn}
           animateShutter={false}
         >
+          <CameraQuadrants 
+            activeQuadrant={activeQuadrant} 
+            onQuadrantPress={handleQuadrantPress}
+          />
+          {boundingBox && (
+            <BoundingBox 
+              box={boundingBox}
+              screenWidth={screenWidth}
+              screenHeight={screenHeight}
+            />
+          )}
           {!isConnected && (
             <Text style={styles.connectionStatus}>
               {targetLanguage === 'hi' ? 'पुन: कनेक्ट हो रहा है...' : 'Reconnecting...'}

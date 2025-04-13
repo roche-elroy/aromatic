@@ -75,7 +75,7 @@ export default function Profile() {
       try {
         const translated: Record<string, string> = {};
         for (const key in uiStrings) {
-          translated[key] = await translateText(uiStrings[key]);
+          translated[key] = await translateText(uiStrings[key as keyof typeof uiStrings]);
         }
         setTranslations(translated);
       } catch (error) {
@@ -112,11 +112,12 @@ export default function Profile() {
 
   const handleAddContact = async () => {
     const auth = getAuth();
-    const contactId = auth.currentUser?.uid; // Safely get user ID
+    const contactId = auth.currentUser?.uid;
     if (!input.trim()) return;
   
     try {
-      await addEmergencyContact(input.trim());
+      const formattedNumber = `+91${input.trim()}`; // Remove space after +91
+      await addEmergencyContact(formattedNumber);
       setInput("");
   
       Alert.alert("Do you want it to be a default number?", "", [
@@ -130,22 +131,19 @@ export default function Profile() {
           
               if (!currentUser) throw new Error("User not authenticated");
           
-              // 🔍 Find the contact doc with this number and current user
               const q = query(
                 collection(db, "contacts"),
                 where("uid", "==", currentUser.uid),
-                where("number", "==", input.trim())
+                where("number", "==", formattedNumber) // Use formattedNumber here
               );
           
               const snapshot = await getDocs(q);
           
               if (!snapshot.empty) {
                 const contactDoc = snapshot.docs[0];
-                // ✅ Add the 'defaultContact' field to this doc
                 await updateDoc(doc(db, "contacts", contactDoc.id), {
-                  defaultContact: input.trim(),
+                  defaultContact: formattedNumber // Use formattedNumber here
                 });
-          
                 console.log("Default contact field added to contact!");
               } else {
                 console.warn("No contact found to mark as default.");
@@ -154,7 +152,6 @@ export default function Profile() {
               console.error("Error saving default contact: ", error);
             }
           }
-          
         },
         { text: "No" },
       ]);
@@ -275,14 +272,17 @@ export default function Profile() {
 
       {isAdding ? (
         <>
-          <TextInput
-            placeholder={translations.addNumber}
-            value={input}
-            onChangeText={setInput}
-            keyboardType="numeric"
-            style={styles.input}
-          />
-          <Button title={translations.addContact} onPress={handleAddContact} />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.input, { flex: 0, paddingHorizontal: 10 }]}>+91</Text>
+            <TextInput
+              placeholder={translations.addNumber}
+              value={input}
+              onChangeText={setInput}
+              keyboardType="numeric"
+              style={[styles.input, { flex: 1 }]}
+            />
+          </View>
+          <Button title={translations.addContact} onPress={() => handleAddContact()} />
           <View style={{ marginVertical: 5 }} />
           <Button
             title={translations.cancel}
