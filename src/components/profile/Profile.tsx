@@ -300,20 +300,18 @@ export default function Profile() {
             {contacts.length === 0 ? (
               <Text style={styles.noContacts}>{translations.noContacts}</Text>
             ) : (
-              <FlatList
-                data={contacts}
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item }) => (
+              <ScrollView style={styles.contactsScrollView}>
+                {contacts.map((item, index) => (
                   <TouchableOpacity 
+                    key={index}
                     style={styles.contactItem}
                     onPress={() => handleDeleteContact(item)}
                   >
                     <Text style={styles.contactText}>{item}</Text>
                     <MaterialIcons name="delete-outline" size={24} color="crimson" />
                   </TouchableOpacity>
-                )}
-                style={styles.contactsList}
-              />
+                ))}
+              </ScrollView>
             )}
           </Collapsible>
         </View>
@@ -435,6 +433,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    maxHeight: 400, // Add maximum height
   },
   collapseHeader: {
     flexDirection: 'row',
@@ -561,5 +560,8 @@ const styles = StyleSheet.create({
   },
   registerButton: {
     backgroundColor: '#34C759',
+  },
+  contactsScrollView: {
+    maxHeight: 300, // Adjust this value based on your needs
   },
 });
