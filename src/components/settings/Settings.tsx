@@ -199,36 +199,6 @@ export default function SettingsScreen() {
           />
         </View>
       </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Speech Settings</Text>
-        
-        <View style={styles.sliderContainer}>
-          <Text style={styles.label}>Pitch: {pitch.toFixed(1)}</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={0.5}
-            maximumValue={2.0}
-            value={pitch}
-            onValueChange={handlePitchChange}
-            minimumTrackTintColor="#007AFF"
-            maximumTrackTintColor="#000000"
-          />
-        </View>
-
-        <View style={styles.sliderContainer}>
-          <Text style={styles.label}>Rate: {rate.toFixed(1)}</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={0.5}
-            maximumValue={1.5}
-            value={rate}
-            onValueChange={handleRateChange}
-            minimumTrackTintColor="#007AFF"
-            maximumTrackTintColor="#000000"
-          />
-        </View>
-      </View>
     </ScrollView>
   );
 }
