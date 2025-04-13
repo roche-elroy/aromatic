@@ -24,7 +24,7 @@ export default function CameraScreen() {
   const [isConnected, setIsConnected] = useState(false);
   const [facing, setFacing] = useState<CameraType>("back");
   const [isObjectClose, setIsObjectClose] = useState(false);
-  const PROXIMITY_THRESHOLD = 10; // 75cm threshold (update as needed)
+  const PROXIMITY_THRESHOLD = 0.1; // 75cm threshold (update as needed)
   const cameraRef = useRef<CameraView>(null);
   const isStreaming = useRef<boolean>(false);  
   const wsRef = useRef<WebSocket | null>(null);

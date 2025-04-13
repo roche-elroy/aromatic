@@ -217,7 +217,7 @@ async def video_stream(websocket: WebSocket):
                     if results is not None and active_clients[client_id].is_active:
                         depth_info = ""
                         if isinstance(depth_result, dict) and depth_result.get("depth"):
-                            depth_info = f" | Distance: {depth_result['depth']:.1f}cm"
+                            depth_info = f" | Distance: {depth_result['depth']:.1f}m"
                         
                         full_text = detection_text + depth_info if detection_text else "No objects detected"
                         translated_text = await process_translation(full_text, target_lang)
