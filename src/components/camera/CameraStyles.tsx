@@ -118,4 +118,20 @@ export const styles = StyleSheet.create({
       zIndex: 999, // Add this
       elevation: 999, // Add this for Android
     },
+    debugOverlay: {
+      position: 'absolute',
+      top: 60,
+      left: 20,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      padding: 10,
+      borderRadius: 5,
+      maxWidth: '80%',
+      zIndex: 1,
+      elevation: 1, // Add this for Android
+    },
+    debugText: {
+      color: 'white',
+      fontSize: 12,
+      marginBottom: 4,
+    },
   });

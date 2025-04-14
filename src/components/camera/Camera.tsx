@@ -8,10 +8,8 @@ import { useSpeech } from '../../hooks/useSpeech';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
 import { Camera } from 'expo-camera';
-import { CameraQuadrants } from './CameraQuadrants';
-import { getQuadrant, getQuadrantDescription, Quadrant } from '../../utils/quadrantDetection';
-import { BoundingBox } from './BoundingBox';
 import { useFocusEffect } from '@react-navigation/native';
+import { TrackedObjects } from './TrackedObjects';
 
 import { styles } from "./CameraStyles";
 
@@ -33,11 +31,11 @@ export default function CameraScreen() {
   const appState = useRef(AppState.currentState);
   const [isActive, setIsActive] = useState(true);
   const [isTorchOn, setIsTorchOn] = useState(false);
-  const [activeQuadrant, setActiveQuadrant] = useState<Quadrant>(null);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const [boundingBox, setBoundingBox] = useState<any>(null);
   const [isScreenFocused, setIsScreenFocused] = useState(false);
   const shouldProcessFrames = useRef<boolean>(false);
+  const [trackingResults, setTrackingResults] = useState<any[]>([]);
 
   const handlePermissions = async () => {
     const { status, canAskAgain } = await Camera.getCameraPermissionsAsync();
@@ -181,10 +179,9 @@ export default function CameraScreen() {
         const result = JSON.parse(event.data);
         console.log("📥 Received server response:", result);
         
-        if (result.bounding_box) {
-          setBoundingBox(result.bounding_box);
-          const quadrant = getQuadrant(result.bounding_box, screenWidth);
-          setActiveQuadrant(quadrant);
+        if (result.tracking_results) {
+          console.log(`🎯 Detected ${result.tracking_results.length} objects`);
+          setTrackingResults(result.tracking_results);
         }
         if (result.translated_text) {
           setDetectionResult(result.translated_text);
@@ -237,9 +234,9 @@ export default function CameraScreen() {
         Speech.stop();
         setDetectionResult("");
         setBoundingBox(null);
-        setActiveQuadrant(null);
         setDepthValue(null);
         setIsObjectClose(false);
+        setTrackingResults([]);
       };
     }, [targetLanguage, isActive])
   );
@@ -335,13 +332,14 @@ export default function CameraScreen() {
     }
   };
 
-  const handleQuadrantPress = (quadrant: 'left' | 'right') => {
-    if (!isScreenFocused) return;
-    const desc = getQuadrantDescription(quadrant, targetLanguage);
-    if (desc) {
-      speakText(desc);
+  const handleObjectTap = async (info: string) => {
+    console.log('👆 Object tapped:', info);
+    if (isScreenFocused) {
+      const translatedInfo = await translateText(info);
+      speakText(translatedInfo);
     }
   };
+
   // // Main camera view.
   return (  
     <View style={styles.container}>  
@@ -357,15 +355,12 @@ export default function CameraScreen() {
           enableTorch={isTorchOn}
           animateShutter={false}
         >
-          <CameraQuadrants 
-            activeQuadrant={activeQuadrant} 
-            onQuadrantPress={handleQuadrantPress}
-          />
-          {boundingBox && (
-            <BoundingBox 
-              box={boundingBox}
+          {trackingResults.length > 0 && (
+            <TrackedObjects
+              objects={trackingResults}
               screenWidth={screenWidth}
               screenHeight={screenHeight}
+              onTap={handleObjectTap}
             />
           )}
           {!isConnected && (

@@ -12,10 +12,12 @@ from ultralytics import YOLO
 from translation import translate_text
 from depth import get_depth
 from pydantic import BaseModel
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from twilio_calls import router as twilio_router
+from objectTracking import ObjectTracker
+import json
 
 # Initialize thread pools and queues
 detection_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="detection")
@@ -77,31 +79,61 @@ print(f"🔄 Loading YOLO model from {MODEL_PATH}")
 model = YOLO(MODEL_PATH)
 print("✅ Model loaded successfully")
 
+object_tracker = ObjectTracker()
+
 async def process_frame_detection(frame):
     if frame is None:
-        return None, "Invalid frame"
+        return None, "Invalid frame", None, None
+    
     try:
         results = model(frame)[0]
         detected_objects = []
-        bounding_box = None
+        detections_for_tracker = []
         
         for box in results.boxes:
             label = model.names[int(box.cls)]
+            confidence = float(box.conf)
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            
             detected_objects.append(label)
-            if bounding_box is None:  # Track the first detected object
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                bounding_box = {
-                    "x1": x1,
-                    "y1": y1,
-                    "x2": x2,
-                    "y2": y2
-                }
+            detections_for_tracker.append({
+                'bbox': [x1, y1, x2, y2],
+                'confidence': confidence,
+                'class_name': label
+            })
+        
+        # Update tracker
+        tracked_objects = object_tracker.update(frame, detections_for_tracker)
+        
+        # Format tracking results
+        tracking_results = []
+        for obj in tracked_objects:
+            tracking_results.append({
+                'id': obj.track_id,
+                'class': obj.class_name,
+                'bbox': list(obj.bbox),
+                'confidence': obj.confidence
+            })
         
         detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
-        return results, detection_text, bounding_box
+        
+        # Return first bounding box for compatibility with existing code
+        bounding_box = None
+        if tracking_results:
+            first_track = tracking_results[0]
+            x1, y1, x2, y2 = first_track['bbox']
+            bounding_box = {
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2
+            }
+        
+        return results, detection_text, bounding_box, tracking_results
+        
     except Exception as e:
         print(f"❌ Detection error: {str(e)}")
-        return None, "Detection error", None
+        return None, "Detection error", None, None
 
 async def process_frame_depth(frame):
     if frame is None:
@@ -211,7 +243,7 @@ async def video_stream(websocket: WebSocket):
                     detection_task = asyncio.create_task(process_frame_detection(frame))
                     depth_task = asyncio.create_task(process_frame_depth(frame))
                     
-                    results, detection_text, bounding_box = await detection_task
+                    results, detection_text, bounding_box, tracking_results = await detection_task
                     depth_result = await depth_task
 
                     if results is not None and active_clients[client_id].is_active:
@@ -229,6 +261,7 @@ async def video_stream(websocket: WebSocket):
                                 "method": depth_result.get("method", "none"),
                                 "translated_text": translated_text,
                                 "bounding_box": bounding_box,
+                                "tracking_results": tracking_results,
                                 "status": "success"
                             })
                 except Exception as e:
