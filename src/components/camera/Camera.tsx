@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Button, Alert, Li
 import * as Speech from 'expo-speech';
 import { useTranslation } from "../../context/TranslationContext";
 import { useSpeech } from '../../hooks/useSpeech';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SERVER_IP } from "../../lib/constants";
 import { Camera } from 'expo-camera';
 import { useFocusEffect } from '@react-navigation/native';
@@ -340,9 +340,24 @@ export default function CameraScreen() {
     }
   };
 
+  // First, add a function to get positions of all tracked objects
+  const getObjectPositions = () => {
+    if (!trackingResults.length) return '';
+    
+    const positions = trackingResults.map(obj => {
+      const centerX = (obj.bbox[0] + obj.bbox[2]) / 2;
+      let position = 'center';
+      if (centerX < 0.33) position = 'left';
+      else if (centerX > 0.66) position = 'right';
+      return `${obj.class} is on the ${position}`;
+    });
+    
+    return positions.join(', ');
+  };
+
   // // Main camera view.
-  return (  
-    <View style={styles.container}>  
+  return (
+    <View style={styles.container}>
       <TouchableOpacity 
         style={styles.camera} 
         onPress={handleCameraPress}
@@ -355,6 +370,7 @@ export default function CameraScreen() {
           enableTorch={isTorchOn}
           animateShutter={false}
         >
+          {/* Render TrackedObjects first (lower z-index) */}
           {trackingResults.length > 0 && (
             <TrackedObjects
               objects={trackingResults}
@@ -363,14 +379,20 @@ export default function CameraScreen() {
               onTap={handleObjectTap}
             />
           )}
+
+          {/* Status messages */}
           {!isConnected && (
-            <Text style={styles.connectionStatus}>
+            <Text style={[styles.connectionStatus, { zIndex: 99 }]}>
               {targetLanguage === 'hi' ? 'पुन: कनेक्ट हो रहा है...' : 'Reconnecting...'}
             </Text>
           )}
-          {detectionResult && (
-            <View>
-              <Text style={styles.detectionText}>{detectionResult}</Text>
+
+          {/* Detection results */}
+          {(detectionResult || depthValue) && (
+            <View style={styles.detectionContainer}>
+              <Text style={styles.detectionText}>
+                {`${detectionResult}`}
+              </Text>
               {isObjectClose && (
                 <Text style={styles.proximityWarning}>
                   {targetLanguage === 'hi'
@@ -380,37 +402,55 @@ export default function CameraScreen() {
               )}
             </View>
           )}
-          <View style={styles.centerButtonContainer}>
+
+          {/* Control panel on top */}
+          <View style={styles.controlPanel}>
             <TouchableOpacity 
               onPress={handleCameraFlip}
               onLongPress={handleCameraLongPress}
               delayLongPress={500}
-              style={styles.cameraButton}
+              style={styles.sideButton}
             >
               <Ionicons 
                 name="camera-reverse" 
-                size={30} 
+                size={28} 
                 color="white" 
               />
             </TouchableOpacity>
-            <View style={styles.flashButtonContainer}>
-              <TouchableOpacity 
-                onPress={handleTorchToggle}
-                onLongPress={handleTorchLongPress}
-                delayLongPress={500}
-                style={styles.flashButton}
-              >
-                <Ionicons 
-                  name={isTorchOn ? 'flashlight' : 'flashlight-outline'} 
-                  size={24} 
-                  color="white" 
-                />
-              </TouchableOpacity>
-            </View>
+
+            <TouchableOpacity 
+              onPress={async () => {
+                const positions = getObjectPositions();
+                if (positions) {
+                  const translatedPositions = await translateText(positions);
+                  speakText(translatedPositions);
+                }
+              }}
+              style={styles.centerButton}
+            >
+              <MaterialCommunityIcons 
+                name="crosshairs-gps" 
+                size={40} 
+                color="white" 
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={handleTorchToggle}
+              onLongPress={handleTorchLongPress}
+              delayLongPress={500}
+              style={styles.sideButton}
+            >
+              <Ionicons 
+                name={isTorchOn ? 'flashlight' : 'flashlight-outline'} 
+                size={28} 
+                color="white" 
+              />
+            </TouchableOpacity>
           </View>
         </CameraView>
       </TouchableOpacity>
-    </View>  
+    </View>
   );  
 }
 
