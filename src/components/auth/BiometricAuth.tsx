@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { useBiometricAuth } from '../../hooks/useBiometricAuth';
 import { useTranslation } from '../../context/TranslationContext';
@@ -11,6 +11,7 @@ interface BiometricAuthProps {
 }
 
 export const BiometricAuth: React.FC<BiometricAuthProps> = ({ onAuthSuccess }) => {
+  const [usePin, setUsePin] = useState(false);
   const { isBiometricAvailable, authenticate } = useBiometricAuth();
   const { targetLanguage } = useTranslation();
   const speakText = useSpeech();
@@ -30,8 +31,32 @@ export const BiometricAuth: React.FC<BiometricAuthProps> = ({ onAuthSuccess }) =
     ? 'वीजनमेट में आपका स्वागत है' 
     : 'Welcome to VisionMate';
 
+  const switchAuthText = targetLanguage === 'hi'
+    ? usePin ? 'फिंगरप्रिंट का उपयोग करें' : 'पिन का उपयोग करें'
+    : usePin ? 'Use Fingerprint' : 'Use PIN';
+
+  // If biometric is not available, only show PIN auth
   if (!isBiometricAvailable) {
     return <PinAuth onAuthSuccess={onAuthSuccess} />;
+  }
+
+  // If user chose to use PIN or biometric
+  if (usePin) {
+    return (
+      <>
+        <PinAuth onAuthSuccess={onAuthSuccess} />
+        <TouchableOpacity 
+          style={styles.switchAuthButton}
+          onPress={() => {
+            speakText(switchAuthText);
+            setUsePin(false);
+          }}
+        >
+          <Ionicons name="finger-print" size={24} color="#fff" />
+          <Text style={styles.switchAuthText}>{switchAuthText}</Text>
+        </TouchableOpacity>
+      </>
+    );
   }
 
   return (
@@ -53,6 +78,17 @@ export const BiometricAuth: React.FC<BiometricAuthProps> = ({ onAuthSuccess }) =
       >
         <Ionicons name="finger-print" size={80} color="#fff" />
         <Text style={styles.authButtonText}>{authButtonText}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.switchAuthButton}
+        onPress={() => {
+          speakText(switchAuthText);
+          setUsePin(true);
+        }}
+      >
+        <Ionicons name="keypad" size={24} color="#fff" />
+        <Text style={styles.switchAuthText}>{switchAuthText}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -106,5 +142,20 @@ const styles = StyleSheet.create({
     marginTop: 24,
     textAlign: 'center',
     fontWeight: '600',
+  },
+  switchAuthButton: {
+    position: 'absolute',
+    bottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 12,
+    borderRadius: 20,
+    alignSelf: 'center',
+  },
+  switchAuthText: {
+    color: '#fff',
+    marginLeft: 8,
+    fontSize: 16,
   },
 });
