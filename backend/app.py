@@ -12,10 +12,12 @@ from ultralytics import YOLO
 from translation import translate_text
 from depth import get_depth
 from pydantic import BaseModel
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from twilio_calls import router as twilio_router
+from objectTracking import ObjectTracker
+import json
 
 # Initialize thread pools and queues
 detection_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="detection")
@@ -77,17 +79,61 @@ print(f"🔄 Loading YOLO model from {MODEL_PATH}")
 model = YOLO(MODEL_PATH)
 print("✅ Model loaded successfully")
 
+object_tracker = ObjectTracker()
+
 async def process_frame_detection(frame):
     if frame is None:
-        return None, "Invalid frame"
+        return None, "Invalid frame", None, None
+    
     try:
         results = model(frame)[0]
-        detected_objects = [model.names[int(box.cls)] for box in results.boxes]
+        detected_objects = []
+        detections_for_tracker = []
+        
+        for box in results.boxes:
+            label = model.names[int(box.cls)]
+            confidence = float(box.conf)
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            
+            detected_objects.append(label)
+            detections_for_tracker.append({
+                'bbox': [x1, y1, x2, y2],
+                'confidence': confidence,
+                'class_name': label
+            })
+        
+        # Update tracker
+        tracked_objects = object_tracker.update(frame, detections_for_tracker)
+        
+        # Format tracking results
+        tracking_results = []
+        for obj in tracked_objects:
+            tracking_results.append({
+                'id': obj.track_id,
+                'class': obj.class_name,
+                'bbox': list(obj.bbox),
+                'confidence': obj.confidence
+            })
+        
         detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
-        return results, detection_text
+        
+        # Return first bounding box for compatibility with existing code
+        bounding_box = None
+        if tracking_results:
+            first_track = tracking_results[0]
+            x1, y1, x2, y2 = first_track['bbox']
+            bounding_box = {
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2
+            }
+        
+        return results, detection_text, bounding_box, tracking_results
+        
     except Exception as e:
         print(f"❌ Detection error: {str(e)}")
-        return None, "Detection error"
+        return None, "Detection error", None, None
 
 async def process_frame_depth(frame):
     if frame is None:
@@ -157,20 +203,17 @@ async def video_stream(websocket: WebSocket):
         
         while True:
             try:
-                # Check connection state
                 if not websocket.client_state.CONNECTED:
                     print(f"🔌 Client disconnected: {client_id}")
                     break
 
-                # Check if client is active
                 if not active_clients[client_id].is_active:
                     await asyncio.sleep(0.5)
                     continue
 
-                # Receive frame with timeout
                 try:
                     data = await asyncio.wait_for(
-                        websocket.receive_text(),
+                        websocket.receive_json(),  # Changed to receive_json
                         timeout=5.0
                     )
                 except asyncio.TimeoutError:
@@ -179,9 +222,13 @@ async def video_stream(websocket: WebSocket):
                 # Update activity timestamp
                 active_clients[client_id].last_active = datetime.now()
 
+                # Check if we should process this frame
+                if not data.get('shouldProcess', False):
+                    continue
+
                 # Validate and decode frame
                 try:
-                    frame_data = base64.b64decode(data)
+                    frame_data = base64.b64decode(data['frame'])
                     np_frame = np.frombuffer(frame_data, np.uint8)
                     frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
                     if frame is None:
@@ -191,29 +238,30 @@ async def video_stream(websocket: WebSocket):
                     print(f"❌ Frame decode error: {str(e)}")
                     continue
 
-                # Process frame
+                # Process frame only if shouldProcess is true
                 try:
                     detection_task = asyncio.create_task(process_frame_detection(frame))
                     depth_task = asyncio.create_task(process_frame_depth(frame))
                     
-                    results, detection_text = await detection_task
+                    results, detection_text, bounding_box, tracking_results = await detection_task
                     depth_result = await depth_task
 
                     if results is not None and active_clients[client_id].is_active:
                         depth_info = ""
                         if isinstance(depth_result, dict) and depth_result.get("depth"):
-                            depth_info = f" | Distance: {depth_result['depth']:.1f}cm"
+                            depth_info = f" | Distance: {depth_result['depth']:.1f}m"
                         
                         full_text = detection_text + depth_info if detection_text else "No objects detected"
                         translated_text = await process_translation(full_text, target_lang)
 
-                        # Send response
                         if websocket.client_state.CONNECTED:
                             await websocket.send_json({
                                 "depth": depth_result.get("depth") if isinstance(depth_result, dict) else None,
-                                "confidence": depth_result.get("confidence", 0) if isinstance(depth_result, dict) else 0,
-                                "method": depth_result.get("method", "none") if isinstance(depth_result, dict) else "none",
+                                "confidence": depth_result.get("confidence", 0),
+                                "method": depth_result.get("method", "none"),
                                 "translated_text": translated_text,
+                                "bounding_box": bounding_box,
+                                "tracking_results": tracking_results,
                                 "status": "success"
                             })
                 except Exception as e:

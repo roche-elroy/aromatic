@@ -1,20 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
+import Slider from '@react-native-community/slider';
 import { useTranslation } from '../../context/TranslationContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingsScreen() {
   const { targetLanguage, setTargetLanguage, supportedLanguages, translateText } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [translations, setTranslations] = useState({
     title: 'Translation Settings',
     label: 'Select Language:',
     languages: {} as Record<string, string>
   });
+  const [pitch, setPitch] = useState(1.0);
+  const [rate, setRate] = useState(0.9);
 
-  // Translate UI elements when language changes
   useEffect(() => {
-    translateUIElements();
+    const initializeSettings = async () => {
+      await loadSpeechSettings();
+    };
+    initializeSettings();
+  }, []); // Run only once on mount
+
+  useEffect(() => {
+    if (targetLanguage) {
+      translateUIElements();
+    }
   }, [targetLanguage]);
 
   const translateUIElements = async () => {
@@ -29,14 +43,23 @@ export default function SettingsScreen() {
 
     setIsLoading(true);
     try {
-      // Translate static text
-      const translatedTitle = await translateText('Translation Settings');
-      const translatedLabel = await translateText('Select Language:');
+      // Batch translations together
+      const [translatedTitle, translatedLabel] = await Promise.all([
+        translateText('Translation Settings'),
+        translateText('Select Language:')
+      ]);
 
-      // Translate language names
+      // Batch language translations in chunks
       const translatedLanguages: Record<string, string> = {};
-      for (const lang of supportedLanguages) {
-        translatedLanguages[lang.code] = await translateText(lang.name);
+      const chunkSize = 5;
+      for (let i = 0; i < supportedLanguages.length; i += chunkSize) {
+        const chunk = supportedLanguages.slice(i, i + chunkSize);
+        const translations = await Promise.all(
+          chunk.map(lang => translateText(lang.name))
+        );
+        chunk.forEach((lang, index) => {
+          translatedLanguages[lang.code] = translations[index];
+        });
       }
 
       setTranslations({
@@ -51,6 +74,17 @@ export default function SettingsScreen() {
     }
   };
 
+  const loadSpeechSettings = async () => {
+    try {
+      const savedPitch = await AsyncStorage.getItem('speech_pitch');
+      const savedRate = await AsyncStorage.getItem('speech_rate');
+      if (savedPitch) setPitch(parseFloat(savedPitch));
+      if (savedRate) setRate(parseFloat(savedRate));
+    } catch (error) {
+      console.error('Error loading speech settings:', error);
+    }
+  };
+
   const handleLanguageChange = async (lang: string) => {
     setIsLoading(true);
     try {
@@ -60,10 +94,46 @@ export default function SettingsScreen() {
     }
   };
 
-  // Get translated language name or fall back to original
+  const handlePitchChange = async (value: number) => {
+    setPitch(value);
+    try {
+      await AsyncStorage.setItem('speech_pitch', value.toString());
+    } catch (error) {
+      console.error('Error saving pitch:', error);
+    }
+  };
+
+  const handleRateChange = async (value: number) => {
+    setRate(value);
+    try {
+      await AsyncStorage.setItem('speech_rate', value.toString());
+    } catch (error) {
+      console.error('Error saving rate:', error);
+    }
+  };
+
   const getLanguageName = (lang: { code: string; name: string }) => {
     if (targetLanguage === 'en') return lang.name;
     return translations.languages[lang.code] || lang.name;
+  };
+
+  const openCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Camera access is needed to take pictures.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+      console.log('Image URI:', result.assets[0].uri);
+      // You can pass this image to MediaPipe here
+    }
   };
 
   return (
@@ -91,6 +161,42 @@ export default function SettingsScreen() {
               ))}
             </Picker>
           )}
+        </View>
+
+        <Button title="Capture Image" onPress={openCamera} color="#007bff" />
+
+        {imageUri && (
+          <Image source={{ uri: imageUri }} style={styles.previewImage} />
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Speech Settings</Text>
+        
+        <View style={styles.sliderContainer}>
+          <Text style={styles.label}>Pitch: {pitch.toFixed(1)}</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0.5}
+            maximumValue={2.0}
+            value={pitch}
+            onValueChange={handlePitchChange}
+            minimumTrackTintColor="#007AFF"
+            maximumTrackTintColor="#000000"
+          />
+        </View>
+
+        <View style={styles.sliderContainer}>
+          <Text style={styles.label}>Rate: {rate.toFixed(1)}</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0.5}
+            maximumValue={1.5}
+            value={rate}
+            onValueChange={handleRateChange}
+            minimumTrackTintColor="#007AFF"
+            maximumTrackTintColor="#000000"
+          />
         </View>
       </View>
     </ScrollView>
@@ -126,5 +232,19 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginVertical: 20,
-  }
+  },
+  previewImage: {
+    marginTop: 15,
+    width: '100%',
+    height: 300,
+    borderRadius: 10,
+    resizeMode: 'cover',
+  },
+  sliderContainer: {
+    marginBottom: 20,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
 });

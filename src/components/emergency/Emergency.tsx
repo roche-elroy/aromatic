@@ -8,6 +8,7 @@ import { useTranslation } from '../../context/TranslationContext';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Speech from 'expo-speech';
 import { useSpeech } from '../../hooks/useSpeech';
+import * as SMS from 'expo-sms';
 
 import { SERVER_IP } from '../../lib/constants';
 import FallDetection from '../fallDetection/FallDetection';
@@ -87,14 +88,36 @@ const EmergencyScreen: React.FC = () => {
 
   const sendEmergencyMessage = async (number: string, message: string) => {
     try {
-      const response = await axios.post(`http://${SERVER_IP}:8000/send-sms`, {
-        to: number,
-        message
-      });
-      Alert.alert('Message Sent', `Status: ${response.data.status}`);
+      // First check if SMS is available
+      const isAvailable = await SMS.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('Error', 'SMS is not available on this device');
+        return;
+      }
+
+      // Send the SMS
+      const { result } = await SMS.sendSMSAsync(
+        [number], // Array of phone numbers
+        message || "EMERGENCY: I need immediate help! Please contact me as soon as possible.", // Default emergency message if none provided
+        {
+          // You can add attachments here if needed
+        }
+      );
+
+      // Handle the result
+      switch (result) {
+        case 'sent':
+          Alert.alert('Success', 'Emergency message was sent');
+          break;
+        case 'cancelled':
+          Alert.alert('Cancelled', 'Message sending was cancelled');
+          break;
+        default:
+          Alert.alert('Status', 'Message status unknown');
+      }
     } catch (error) {
-      console.error('Message failed:', error);
-      Alert.alert('Message Failed', 'Unable to send the message.');
+      console.error('SMS failed:', error);
+      Alert.alert('Error', 'Failed to send emergency message');
     }
   };
 
@@ -205,7 +228,35 @@ const EmergencyScreen: React.FC = () => {
                   `What would you like to do with ${item}?`,
                   [
                     { text: 'Call', onPress: () => makeEmergencyCall(item) },
-                    { text: 'SMS', onPress: () => sendEmergencyMessage(item, 'Send Help') },
+                    { 
+                      text: 'Send Emergency SMS', 
+                      onPress: () => Alert.alert(
+                        'Select Message',
+                        'Choose an emergency message:',
+                        [
+                          { 
+                            text: 'Need Help!', 
+                            onPress: () => sendEmergencyMessage(item, 'EMERGENCY: I need help! Please contact me ASAP!')
+                          },
+                          { 
+                            text: 'Medical Emergency', 
+                            onPress: () => sendEmergencyMessage(item, 'MEDICAL EMERGENCY: Need immediate assistance! Please help!')
+                          },
+                          { 
+                            text: 'I\'ve Fallen', 
+                            onPress: () => sendEmergencyMessage(item, 'EMERGENCY: I\'ve fallen and need assistance! Please help!')
+                          },
+                          { 
+                            text: 'Custom Message', 
+                            onPress: () => sendEmergencyMessage(item, '') // Will use default message
+                          },
+                          { 
+                            text: 'Cancel', 
+                            style: 'cancel' 
+                          }
+                        ]
+                      )
+                    },
                     { text: 'WhatsApp', onPress: () => sendWhatsAppMessage(item, 'Hello, how are you?') },
                     { text: 'Cancel', style: 'cancel' }
                   ]

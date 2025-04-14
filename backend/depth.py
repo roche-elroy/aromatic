@@ -1,119 +1,63 @@
-from collections import deque
-import numpy as np
-import torch
-from PIL import Image
 import cv2
+import torch
+import numpy as np
+from collections import deque
 from transformers import pipeline
+from PIL import Image
 
-# Known object widths in centimeters
-KNOWN_WIDTHS = {
-    'person': 45,  # average shoulder width
-    'bottle': 8,
-    'cup': 8,
-    'cell phone': 7,
-    'book': 15,
-    'laptop': 35,
-    'chair': 45,
-    'table': 120,
-    'door': 90
-}
-
-# Camera parameters (adjust based on your device)
-FOCAL_LENGTH = 800  # approximate focal length in pixels
-SENSOR_WIDTH = 640  # image width in pixels
-
-# Initialize model and buffers
+# Load the Depth Anything V2 Small model
+device = "cuda" if torch.cuda.is_available() else "cpu"
 pipe = pipeline(
     task="depth-estimation", 
-    model="depth-anything/Depth-Anything-V2-Small-hf",
-    device="cuda" if torch.cuda.is_available() else "cpu"
+    model="depth-anything/Depth-Anything-V2-Small-hf", 
+    device=0 if device == "cuda" else -1
 )
-distance_buffer = deque(maxlen=8)
 
-def calculate_depth_from_width(pixel_width, real_width):
-    """Calculate depth using real-world object width."""
-    if pixel_width == 0:
-        return None
-    return (real_width * FOCAL_LENGTH) / pixel_width
+# Calibration parameters
+FOCAL_LENGTH = 900  # Approximate focal length in pixels
+KNOWN_OBJECT_HEIGHT = 1.725  # Example: Assume an average human height (in meters)
+PIXEL_HEIGHT = 1360  # Expected height of a known object in pixels at 1m
+
+# Moving average buffer for stability
+distance_buffer = deque(maxlen=10)
 
 def get_depth(frame, detected_objects=None):
+    """
+    Estimate depth from frame using Depth Anything V2 Small model.
+    Returns a dict with depth information compatible with existing frontend.
+    """
     if frame is None:
-        return None
+        return {"depth": None, "error": "No frame provided"}
 
     try:
-        # Resize frame for consistent results
-        frame = cv2.resize(frame, (640, 480))
-        
-        # Get AI-based depth estimation
-        pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        depth_result = pipe(pil_image)
-        depth_map = depth_result['predicted_depth'].detach().cpu().numpy()
-        
-        # Apply refinements
-        depth_map = cv2.GaussianBlur(depth_map, (5, 5), 0)
-        depth_min = np.percentile(depth_map, 5)
-        depth_max = np.percentile(depth_map, 95)
-        normalized_depth = np.clip(
-            ((depth_map - depth_min) * 255 / (depth_max - depth_min)),
-            0, 255
-        )
-        
-        # Region-based estimation
-        h, w = normalized_depth.shape
-        center_region = normalized_depth[h//3:2*h//3, w//3:2*w//3]
-        lower_region = normalized_depth[2*h//3:, w//3:2*w//3]
-        upper_region = normalized_depth[:h//3, w//3:2*w//3]
-        
-        # Calculate AI-based depth
-        ai_depth = (
-            0.5 * np.mean(center_region) +
-            0.3 * np.mean(lower_region) +
-            0.2 * np.mean(upper_region)
-        )
-        
-        # Convert to real-world distance
-        ai_distance = (
-            30 + (ai_depth * 70 / 128) if ai_depth < 128
-            else 100 + ((ai_depth - 128) * 400 / 127)
-        )
+        # Convert frame to PIL image
+        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-        # Calculate object-based depth if objects detected
-        object_distances = []
-        if detected_objects and isinstance(detected_objects, list):
-            for obj in detected_objects:
-                if obj.get('class') in KNOWN_WIDTHS:
-                    obj_width = obj.get('width', 0)  # pixel width
-                    if obj_width > 0:
-                        real_width = KNOWN_WIDTHS[obj['class']]
-                        obj_distance = calculate_depth_from_width(obj_width, real_width)
-                        if obj_distance:
-                            object_distances.append(obj_distance)
+        # Perform depth estimation
+        with torch.no_grad():
+            depth_output = pipe(image)["depth"]
 
-        # Combine AI and object-based depths
-        final_distance = ai_distance
-        if object_distances:
-            # Weight object-based distance more if available
-            obj_distance_avg = np.mean(object_distances)
-            final_distance = (0.4 * ai_distance + 0.6 * obj_distance_avg)
+        # Convert depth map to NumPy array
+        depth_np = np.array(depth_output)
 
-        # Temporal smoothing with outlier rejection
-        if len(distance_buffer) > 0:
-            mean_dist = sum(distance_buffer) / len(distance_buffer)
-            if abs(final_distance - mean_dist) <= mean_dist * 0.4:
-                distance_buffer.append(final_distance)
-        else:
-            distance_buffer.append(final_distance)
+        # Get depth value at center pixel
+        h, w = depth_np.shape
+        center_depth_value = depth_np[h // 2, w // 2]
 
-        # Calculate final smoothed distance
-        smoothed_distance = sum(distance_buffer) / len(distance_buffer)
+        # Convert to estimated real-world distance (meters to cm)
+        estimated_distance_cm = (FOCAL_LENGTH * KNOWN_OBJECT_HEIGHT) / (center_depth_value * PIXEL_HEIGHT + 1e-6) * 100
+
+        # Add to buffer & compute smoothed distance
+        distance_buffer.append(estimated_distance_cm)
+        smoothed_distance = np.mean(distance_buffer)
         rounded_distance = round(smoothed_distance, 1)
 
-        # Prepare response with additional info
+        # Return in the same format as before for frontend compatibility
         response = {
             "depth": rounded_distance,
-            "confidence": min(len(distance_buffer) / 8.0, 1.0),
+            "confidence": min(len(distance_buffer) / 10.0, 1.0),
             "unit": "cm",
-            "method": "hybrid" if object_distances else "ai"
+            "method": "depth-anything-v2"
         }
 
         return response
