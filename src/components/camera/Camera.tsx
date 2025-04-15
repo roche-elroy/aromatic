@@ -181,11 +181,48 @@ export default function CameraScreen() {
         
         if (result.tracking_results) {
           console.log(`🎯 Detected ${result.tracking_results.length} objects`);
-          setTrackingResults(result.tracking_results);
+          
+          // Enhance the tracking results with depth information if available
+          interface TrackingResult {
+            class: string;
+            depth?: number;
+            unit?: string;
+            [key: string]: any; // For any other properties that might be present
+          }
+
+          interface EnhancedTrackingResult extends TrackingResult {
+            displayName: string;
+          }
+
+          interface ServerResult {
+            tracking_results: TrackingResult[];
+            depth: number | null;
+            unit?: string;
+          }
+
+                    const enhancedTracking: EnhancedTrackingResult[] = result.tracking_results.map((obj: TrackingResult) => {
+                      // Check if this object has depth information
+                      const depthInfo: string = result.depth !== null ? 
+                        `${result.depth}${result.unit || 'cm'}` : 
+                        (obj.depth ? `${obj.depth}${obj.unit || 'cm'}` : '');
+                      
+                      // Build enhanced object info
+                      return {
+                        ...obj,
+                        // Add depth display if available
+                        displayName: depthInfo ? 
+                          `${obj.class} (${depthInfo})` : 
+                          obj.class
+                      };
+                    });
+          
+          setTrackingResults(enhancedTracking);
         }
+        
         if (result.translated_text) {
           setDetectionResult(result.translated_text);
         }
+        
         if (result.depth !== undefined) {
           setDepthValue(result.depth);
           const isClose = result.depth < PROXIMITY_THRESHOLD;
@@ -197,6 +234,10 @@ export default function CameraScreen() {
             speakText(warningText);
           }
           setIsObjectClose(isClose);
+        }
+        
+        if (result.bounding_box) {
+          setBoundingBox(result.bounding_box);
         }
       } catch (error) {
         console.error("⚠️ Parse Error:", error, "Raw data:", event.data);
@@ -273,7 +314,7 @@ export default function CameraScreen() {
           isStreaming.current && 
           wsRef.current?.readyState === WebSocket.OPEN && 
           photo?.base64 &&
-          shouldProcessFrames.current // Add this check
+          shouldProcessFrames.current
         ) {
           wsRef.current.send(JSON.stringify({
             frame: photo.base64,
@@ -340,22 +381,36 @@ export default function CameraScreen() {
     }
   };
 
-  // First, add a function to get positions of all tracked objects
-  const getObjectPositions = () => {
+  // Function to format depth info for an object
+  const formatObjectDepth = (obj: any) => {
+    if (!obj) return '';
+    
+    // Check if depth exists in the object directly
+    if (obj.depth) {
+      return `${obj.depth}${obj.unit || 'm'}`;
+    }
+    
+    return '';
+  };
+
+  // Function to get positions of all tracked objects with depth
+  const getObjectPositionsWithDepth = () => {
     if (!trackingResults.length) return '';
     
     const positions = trackingResults.map(obj => {
-      const centerX = (obj.bbox[0] + obj.bbox[2]) / 2;
-      let position = 'center';
-      if (centerX < 0.33) position = 'left';
-      else if (centerX > 0.66) position = 'right';
-      return `${obj.class} is on the ${position}`;
+      const className = obj.class.split(' (')[0]; // Remove any position info already in class name
+      const depthInfo = formatObjectDepth(obj);
+      const positionText = depthInfo ? 
+        `${className} is on the ${obj.class.match(/\(([^)]+)\)/)?.[1] || 'center'} at ${depthInfo}` :
+        `${className} is on the ${obj.class.match(/\(([^)]+)\)/)?.[1] || 'center'}`;
+      
+      return positionText;
     });
     
     return positions.join(', ');
   };
 
-  // // Main camera view.
+  // Main camera view
   return (
     <View style={styles.container}>
       <TouchableOpacity 
@@ -420,10 +475,16 @@ export default function CameraScreen() {
 
             <TouchableOpacity 
               onPress={async () => {
-                const positions = getObjectPositions();
+                const positions = getObjectPositionsWithDepth();
                 if (positions) {
                   const translatedPositions = await translateText(positions);
                   speakText(translatedPositions);
+                } else {
+                  // If no objects detected
+                  const noObjectsMessage = targetLanguage === 'hi' ? 
+                    'कोई वस्तु नहीं मिली' : 
+                    'No objects detected';
+                  speakText(noObjectsMessage);
                 }
               }}
               style={styles.centerButton}

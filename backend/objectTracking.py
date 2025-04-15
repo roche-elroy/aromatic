@@ -160,10 +160,10 @@ class ObjectTracker:
             # Position calculation with debug info
             print(f"🎯 Object {track_id} center_x: {center_x:.3f}")
             
-            position = "center"
-            if center_x < 0.33:
+            position = "unknown"
+            if center_x < 0.50:
                 position = "left"
-            elif center_x > 0.66:
+            else:
                 position = "right"
             
             print(f"📍 Object {track_id} position: {position}")
