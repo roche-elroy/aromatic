@@ -9,6 +9,9 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
 import {
   getAuth,
@@ -24,6 +27,8 @@ import {
 } from "../../services/userService";
 import { useTranslation } from "../../context/TranslationContext";
 import { doc, getFirestore, updateDoc, collection, where, getDocs, query } from 'firebase/firestore';
+import { MaterialIcons } from '@expo/vector-icons';
+import Collapsible from 'react-native-collapsible';
 
 export default function Profile() {
   const auth = getAuth();
@@ -38,6 +43,7 @@ export default function Profile() {
   const [isAdding, setIsAdding] = useState(false);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   // Strings to be translated
   const uiStrings = {
@@ -75,7 +81,7 @@ export default function Profile() {
       try {
         const translated: Record<string, string> = {};
         for (const key in uiStrings) {
-          translated[key] = await translateText(uiStrings[key]);
+          translated[key] = await translateText(uiStrings[key as keyof typeof uiStrings]);
         }
         setTranslations(translated);
       } catch (error) {
@@ -112,11 +118,12 @@ export default function Profile() {
 
   const handleAddContact = async () => {
     const auth = getAuth();
-    const contactId = auth.currentUser?.uid; // Safely get user ID
+    const contactId = auth.currentUser?.uid;
     if (!input.trim()) return;
   
     try {
-      await addEmergencyContact(input.trim());
+      const formattedNumber = `+91${input.trim()}`; // Remove space after +91
+      await addEmergencyContact(formattedNumber);
       setInput("");
   
       Alert.alert("Do you want it to be a default number?", "", [
@@ -130,22 +137,19 @@ export default function Profile() {
           
               if (!currentUser) throw new Error("User not authenticated");
           
-              // 🔍 Find the contact doc with this number and current user
               const q = query(
                 collection(db, "contacts"),
                 where("uid", "==", currentUser.uid),
-                where("number", "==", input.trim())
+                where("number", "==", formattedNumber) // Use formattedNumber here
               );
           
               const snapshot = await getDocs(q);
           
               if (!snapshot.empty) {
                 const contactDoc = snapshot.docs[0];
-                // ✅ Add the 'defaultContact' field to this doc
                 await updateDoc(doc(db, "contacts", contactDoc.id), {
-                  defaultContact: input.trim(),
+                  defaultContact: formattedNumber // Use formattedNumber here
                 });
-          
                 console.log("Default contact field added to contact!");
               } else {
                 console.warn("No contact found to mark as default.");
@@ -154,7 +158,6 @@ export default function Profile() {
               console.error("Error saving default contact: ", error);
             }
           }
-          
         },
         { text: "No" },
       ]);
@@ -222,8 +225,9 @@ export default function Profile() {
 
   if (!user) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>{translations.loginRegister}</Text>
+      <View style={styles.loginContainer}>
+        <MaterialIcons name="account-circle" size={80} color="#007AFF" />
+        <Text style={styles.loginTitle}>{translations.loginRegister}</Text>
 
         <TextInput
           placeholder={translations.email}
@@ -231,98 +235,333 @@ export default function Profile() {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
-          style={styles.input}
+          style={styles.loginInput}
         />
         <TextInput
           placeholder={translations.password}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          style={styles.input}
+          style={styles.loginInput}
         />
 
-        <Button title={translations.login} onPress={handleLogin} />
-        <View style={{ marginVertical: 10 }} />
-        <Button title={translations.register} onPress={handleRegister} />
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+          <Text style={styles.buttonText}>{translations.login}</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={[styles.loginButton, styles.registerButton]} onPress={handleRegister}>
+          <Text style={styles.buttonText}>{translations.register}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.welcome}>
-        {translations.welcome},{" "}
-        {user.email.split("@")[0].charAt(0).toUpperCase() +
-          user.email.split("@")[0].slice(1)}
-        !
-      </Text>
-      <Text style={styles.title}>{translations.yourContacts}</Text>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
+    >
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          <View style={styles.userInfo}>
+            <Text style={styles.greeting}>Hello,</Text>
+            <Text style={styles.userName}>
+              {user.email.split("@")[0].charAt(0).toUpperCase() +
+              user.email.split("@")[0].slice(1)}
+            </Text>
+            <Text style={styles.userEmail}>{user.email}</Text>
+            <Text style={styles.userPhone}>+91 XXXXXXXXXX</Text>
+          </View>
+          <View style={styles.avatarContainer}>
+            <MaterialIcons name="account-circle" size={80} color="#007AFF" />
+          </View>
+        </View>
 
-      {contacts.length === 0 ? (
-        <Text style={styles.fallback}>{translations.noContacts}</Text>
-      ) : (
-        <FlatList
-          data={contacts}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => handleDeleteContact(item)}>
-              <Text style={styles.contactItem}>{item}</Text>
-            </TouchableOpacity>
+        {/* Contacts Section */}
+        <View style={styles.contactsCollapse}>
+          <TouchableOpacity 
+            style={styles.collapseHeader}
+            onPress={() => setIsCollapsed(!isCollapsed)}
+          >
+            <Text style={styles.contactsTitle}>{translations.yourContacts}</Text>
+            <MaterialIcons 
+              name={isCollapsed ? "keyboard-arrow-down" : "keyboard-arrow-up"} 
+              size={24} 
+              color="#007AFF" 
+            />
+          </TouchableOpacity>
+          
+          <Collapsible collapsed={isCollapsed}>
+            {contacts.length === 0 ? (
+              <Text style={styles.noContacts}>{translations.noContacts}</Text>
+            ) : (
+              <ScrollView style={styles.contactsScrollView}>
+                {contacts.map((item, index) => (
+                  <TouchableOpacity 
+                    key={index}
+                    style={styles.contactItem}
+                    onPress={() => handleDeleteContact(item)}
+                  >
+                    <Text style={styles.contactText}>{item}</Text>
+                    <MaterialIcons name="delete-outline" size={24} color="crimson" />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </Collapsible>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={[styles.actionGrid, { marginBottom: 20 }]}>
+          {isAdding ? (
+            <View style={styles.addContactForm}>
+              <View style={styles.phoneInputContainer}>
+                <Text style={styles.countryCode}>+91</Text>
+                <TextInput
+                  placeholder={translations.addNumber}
+                  value={input}
+                  onChangeText={setInput}
+                  keyboardType="numeric"
+                  style={styles.phoneInput}
+                />
+              </View>
+              <View style={styles.addContactButtons}>
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.confirmButton]} 
+                  onPress={handleAddContact}
+                >
+                  <Text style={styles.buttonText}>{translations.addContact}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.cancelButton]} 
+                  onPress={() => {
+                    setIsAdding(false);
+                    setInput("");
+                  }}
+                >
+                  <Text style={styles.buttonText}>{translations.cancel}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.buttonGrid}>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.addButton]} 
+                onPress={() => setIsAdding(true)}
+              >
+                <MaterialIcons name="person-add" size={24} color="white" />
+                <Text style={styles.buttonText}>{translations.addContact}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.logoutButton]} 
+                onPress={handleLogout}
+              >
+                <MaterialIcons name="logout" size={24} color="white" />
+                <Text style={styles.buttonText}>{translations.logout}</Text>
+              </TouchableOpacity>
+            </View>
           )}
-          style={styles.list}
-        />
-      )}
-
-      {isAdding ? (
-        <>
-          <TextInput
-            placeholder={translations.addNumber}
-            value={input}
-            onChangeText={setInput}
-            keyboardType="numeric"
-            style={styles.input}
-          />
-          <Button title={translations.addContact} onPress={handleAddContact} />
-          <View style={{ marginVertical: 5 }} />
-          <Button
-            title={translations.cancel}
-            onPress={() => {
-              setIsAdding(false);
-              setInput("");
-            }}
-            color="gray"
-          />
-        </>
-      ) : (
-        <Button title={translations.addContact} onPress={() => setIsAdding(true)} />
-      )}
-
-      <View style={styles.logoutContainer}>
-        <Button title={translations.logout} onPress={handleLogout} color="crimson" />
-      </View>
-    </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, marginTop: 30, flex: 1 },
-  welcome: { fontSize: 25, marginBottom: 20 },
-  title: { fontSize: 22, marginBottom: 15, fontWeight: "bold" },
-  input: {
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  scrollContainer: {
+    padding: 20,
+    flexGrow: 1,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  greeting: {
+    fontSize: 16,
+    color: '#666',
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginVertical: 4,
+  },
+  userEmail: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  userPhone: {
+    fontSize: 14,
+    color: '#666',
+  },
+  avatarContainer: {
+    marginLeft: 20,
+  },
+  contactsCollapse: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    marginTop: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    maxHeight: 400, // Add maximum height
+  },
+  collapseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+  },
+  contactsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  contactsList: {
+    maxHeight: 200,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  contactText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  noContacts: {
+    padding: 20,
+    color: '#666',
+    textAlign: 'center',
+  },
+  actionGrid: {
+    marginTop: 20,
+  },
+  buttonGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 10,
+    marginHorizontal: 5,
+  },
+  addButton: {
+    backgroundColor: '#007AFF',
+  },
+  logoutButton: {
+    backgroundColor: 'crimson',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  addContactForm: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 15,
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  countryCode: {
+    fontSize: 16,
+    color: '#333',
+    marginRight: 10,
+  },
+  phoneInput: {
+    flex: 1,
     borderWidth: 1,
-    borderColor: "#888",
-    borderRadius: 5,
+    borderColor: '#ddd',
+    borderRadius: 8,
     padding: 10,
+    fontSize: 16,
+  },
+  addContactButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  confirmButton: {
+    backgroundColor: '#007AFF',
+  },
+  cancelButton: {
+    backgroundColor: '#666',
+  },
+  // Login screen styles
+  loginContainer: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loginTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginVertical: 20,
+    color: '#333',
+  },
+  loginInput: {
+    width: '100%',
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  loginButton: {
+    width: '100%',
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
     marginBottom: 10,
   },
-  list: { marginBottom: 20 },
-  contactItem: {
-    fontSize: 18,
-    padding: 8,
-    borderBottomWidth: 1,
-    borderColor: "#ccc",
+  registerButton: {
+    backgroundColor: '#34C759',
   },
-  logoutContainer: { marginTop: 20 },
-  fallback: { fontSize: 18, color: "gray", marginVertical: 10 },
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  contactsScrollView: {
+    maxHeight: 300, // Adjust this value based on your needs
+  },
 });
