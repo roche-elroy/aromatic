@@ -14,6 +14,7 @@ router = APIRouter()
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
@@ -54,9 +55,10 @@ def send_whatsapp_message(request: WhatsAppRequest):
     try:
         message = client.messages.create(
             to=f"whatsapp:{request.to}",
-            from_="whatsapp:+14155238886",
+            from_ = f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
             body=request.message
         )
         return {"sid": message.sid, "status": message.status}
     except Exception as e:
+        print("Twilio error:", str(e))  # ✅ Add logging
         raise HTTPException(status_code=500, detail=str(e))

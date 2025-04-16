@@ -12,6 +12,7 @@ import ProfileScreen from './src/components/profile/Profile';
 import { useEffect, useState as useStateEffect } from 'react';
 import "./src/lib/i18n";
 import { BiometricAuth } from './src/components/auth/BiometricAuth';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 //comment the below line to show errors
 import { LogBox } from 'react-native';
@@ -119,9 +120,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <TranslationProvider>
-      <AppContent />
-    </TranslationProvider>
+    <GestureHandlerRootView>
+      <TranslationProvider>
+        <AppContent />
+      </TranslationProvider>
+    </GestureHandlerRootView>
+    
   );
 }
 

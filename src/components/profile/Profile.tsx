@@ -24,6 +24,7 @@ import {
   addEmergencyContact,
   deleteEmergencyContact,
   getEmergencyContacts,
+  saveDefaultContact,
 } from "../../services/userService";
 import { useTranslation } from "../../context/TranslationContext";
 import { doc, getFirestore, updateDoc, collection, where, getDocs, query } from 'firebase/firestore';
@@ -129,35 +130,7 @@ export default function Profile() {
       Alert.alert("Do you want it to be a default number?", "", [
         {
           text: "Yes",
-          onPress: async () => {
-            try {
-              const db = getFirestore();
-              const auth = getAuth();
-              const currentUser = auth.currentUser;
-          
-              if (!currentUser) throw new Error("User not authenticated");
-          
-              const q = query(
-                collection(db, "contacts"),
-                where("uid", "==", currentUser.uid),
-                where("number", "==", formattedNumber) // Use formattedNumber here
-              );
-          
-              const snapshot = await getDocs(q);
-          
-              if (!snapshot.empty) {
-                const contactDoc = snapshot.docs[0];
-                await updateDoc(doc(db, "contacts", contactDoc.id), {
-                  defaultContact: formattedNumber // Use formattedNumber here
-                });
-                console.log("Default contact field added to contact!");
-              } else {
-                console.warn("No contact found to mark as default.");
-              }
-            } catch (error) {
-              console.error("Error saving default contact: ", error);
-            }
-          }
+          onPress: async () => saveDefaultContact(formattedNumber),
         },
         { text: "No" },
       ]);
