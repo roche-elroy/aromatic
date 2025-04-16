@@ -16,6 +16,8 @@ from typing import Dict, List
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from twilio_calls import router as twilio_router
+from fastapi.middleware.cors import CORSMiddleware
+from facemesh import router as facemesh_router
 
 # Initialize thread pools and queues
 detection_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="detection")
@@ -39,6 +41,8 @@ app = FastAPI()
 
 # Include Twilio router
 app.include_router(twilio_router)
+#facemesh
+app.include_router(facemesh_router, prefix="/facemesh")
 
 # Add CORS middleware
 app.add_middleware(

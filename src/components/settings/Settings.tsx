@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert, TextInput } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
+import Slider from '@react-native-community/slider';
 import { useTranslation } from '../../context/TranslationContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ImageStorage } from '../../utils/imageStorage';
 
 export default function SettingsScreen() {
   const { targetLanguage, setTargetLanguage, supportedLanguages, translateText } = useTranslation();
@@ -14,9 +17,22 @@ export default function SettingsScreen() {
     label: 'Select Language:',
     languages: {} as Record<string, string>
   });
+  const [pitch, setPitch] = useState(1.0);
+  const [rate, setRate] = useState(0.9);
 
+  // Initialize settings when component mounts
   useEffect(() => {
-    translateUIElements();
+    const initializeSettings = async () => {
+      await loadSpeechSettings();
+    };
+    initializeSettings();
+  }, []);
+
+  // Translate UI elements based on selected language
+  useEffect(() => {
+    if (targetLanguage) {
+      translateUIElements();
+    }
   }, [targetLanguage]);
 
   const translateUIElements = async () => {
@@ -31,12 +47,21 @@ export default function SettingsScreen() {
 
     setIsLoading(true);
     try {
-      const translatedTitle = await translateText('Translation Settings');
-      const translatedLabel = await translateText('Select Language:');
-      const translatedLanguages: Record<string, string> = {};
+      const [translatedTitle, translatedLabel] = await Promise.all([ 
+        translateText('Translation Settings'),
+        translateText('Select Language:')
+      ]);
 
-      for (const lang of supportedLanguages) {
-        translatedLanguages[lang.code] = await translateText(lang.name);
+      const translatedLanguages: Record<string, string> = {};
+      const chunkSize = 5;
+      for (let i = 0; i < supportedLanguages.length; i += chunkSize) {
+        const chunk = supportedLanguages.slice(i, i + chunkSize);
+        const translations = await Promise.all(
+          chunk.map(lang => translateText(lang.name))
+        );
+        chunk.forEach((lang, index) => {
+          translatedLanguages[lang.code] = translations[index];
+        });
       }
 
       setTranslations({
@@ -51,12 +76,42 @@ export default function SettingsScreen() {
     }
   };
 
+  // Load saved speech settings from AsyncStorage
+  const loadSpeechSettings = async () => {
+    try {
+      const savedPitch = await AsyncStorage.getItem('speech_pitch');
+      const savedRate = await AsyncStorage.getItem('speech_rate');
+      if (savedPitch) setPitch(parseFloat(savedPitch));
+      if (savedRate) setRate(parseFloat(savedRate));
+    } catch (error) {
+      console.error('Error loading speech settings:', error);
+    }
+  };
+
   const handleLanguageChange = async (lang: string) => {
     setIsLoading(true);
     try {
       await setTargetLanguage(lang);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePitchChange = async (value: number) => {
+    setPitch(value);
+    try {
+      await AsyncStorage.setItem('speech_pitch', value.toString());
+    } catch (error) {
+      console.error('Error saving pitch:', error);
+    }
+  };
+
+  const handleRateChange = async (value: number) => {
+    setRate(value);
+    try {
+      await AsyncStorage.setItem('speech_rate', value.toString());
+    } catch (error) {
+      console.error('Error saving rate:', error);
     }
   };
 
@@ -77,131 +132,184 @@ export default function SettingsScreen() {
       return;
     }
 
-    let captured = 0;
-    while (captured < 15) {
-      const result = await ImagePicker.launchCameraAsync({
-        quality: 0.7,
-      });
+    try {
+      const capturedImages: { name: string; uri: string }[] = [];
+      let captured = 0;
 
-      if (result.canceled || result.assets.length === 0) {
-        break; // Stop if user cancels
+      while (captured < 7) {
+        const result = await ImagePicker.launchCameraAsync({
+          quality: 0.7,
+        });
+
+        if (result.canceled || result.assets.length === 0) break;
+
+        const newUri = result.assets[0].uri;
+        // Save image to permanent storage
+        await ImageStorage.saveImage(personName.trim(), newUri);
+        
+        capturedImages.push({ name: personName.trim(), uri: newUri });
+        setImageUris((prev) => [...prev, { name: personName.trim(), uri: newUri }]);
+        captured++;
       }
 
-      const newUri = result.assets[0].uri;
-      setImageUris((prev) => [...prev, { name: personName.trim(), uri: newUri }]);
-      captured++;
+      Alert.alert('Capture Complete', `${captured} images captured for ${personName.trim()}`);
+    } catch (error) {
+      console.error('Error capturing images:', error);
+      Alert.alert('Error', 'Failed to save images. Please try again.');
+    }
+  };
+
+  // Load stored images on component mount
+  useEffect(() => {
+    const loadStoredImages = async () => {
+      try {
+        const stored = await ImageStorage.getStoredImages();
+        setImageUris(stored.map(img => ({ name: img.name, uri: img.uri })));
+      } catch (error) {
+        console.error('Error loading stored images:', error);
+      }
+    };
+
+    loadStoredImages();
+  }, []);
+
+  // Modify uploadImages to use stored images
+  const uploadImages = async () => {
+    const storedImages = await ImageStorage.getStoredImages();
+    if (storedImages.length === 0) {
+      Alert.alert('No Images', 'Please capture images first.');
+      return;
     }
 
-    Alert.alert('Capture Complete', `${captured} images captured for ${personName.trim()}`);
+    setIsLoading(true);
+    try {
+      const formData = new FormData();
+      storedImages.forEach((img, idx) => {
+        formData.append('images', {
+          uri: img.uri,
+          type: 'image/jpeg',
+          name: `${img.name}_${idx}.jpg`,
+        } as any);
+      });
+
+      const response = await fetch('http://192.168.185.1:8000/facemesh/process-images/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Face mesh processing complete:', result);
+      Alert.alert('Success', 'Images processed successfully. Check terminal for landmarks.');
+      
+      // Clear stored images after successful upload
+      await ImageStorage.clearStoredImages();
+      setImageUris([]);
+      setPersonName('');
+
+    } catch (error) {
+      console.error('Upload error:', error);
+      Alert.alert('Error', 'Failed to process images. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{translations.title}</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      {isLoading && <ActivityIndicator size="large" />}
+      <Text style={styles.title}>{translations.title}</Text>
 
-        <View style={styles.pickerContainer}>
-          <Text style={styles.label}>{translations.label}</Text>
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#0000ff" style={styles.loader} />
-          ) : (
-            <Picker
-              selectedValue={targetLanguage}
-              onValueChange={handleLanguageChange}
-              style={styles.picker}
-              enabled={!isLoading}
-            >
-              {supportedLanguages.map((lang) => (
-                <Picker.Item 
-                  key={lang.code} 
-                  label={getLanguageName(lang)} 
-                  value={lang.code} 
-                />
-              ))}
-            </Picker>
-          )}
-        </View>
+      <Text style={styles.label}>{translations.label}</Text>
+      <Picker
+        selectedValue={targetLanguage}
+        onValueChange={handleLanguageChange}
+        style={styles.picker}
+      >
+        {supportedLanguages.map((lang) => (
+          <Picker.Item
+            key={lang.code}
+            label={getLanguageName(lang)}
+            value={lang.code}
+          />
+        ))}
+      </Picker>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Enter person's name"
-          value={personName}
-          onChangeText={setPersonName}
+      <Text style={styles.label}>Voice Pitch: {pitch.toFixed(2)}</Text>
+      <Slider
+        minimumValue={0.5}
+        maximumValue={2.0}
+        step={0.1}
+        value={pitch}
+        onValueChange={handlePitchChange}
+        style={styles.slider}
+      />
+
+      <Text style={styles.label}>Voice Rate: {rate.toFixed(2)}</Text>
+      <Slider
+        minimumValue={0.5}
+        maximumValue={1.5}
+        step={0.1}
+        value={rate}
+        onValueChange={handleRateChange}
+        style={styles.slider}
+      />
+
+      <TextInput
+        placeholder="Enter person name"
+        value={personName}
+        onChangeText={setPersonName}
+        style={styles.input}
+      />
+
+      <Button title="Capture 7 Images" onPress={openCameraMultiple} />
+      <Button title="Upload Images" onPress={uploadImages} />
+
+      {imageUris.map((img, idx) => (
+        <Image
+          key={idx}
+          source={{ uri: img.uri }}
+          style={{ width: 100, height: 100, marginTop: 10 }}
         />
-
-        <Button title="Capture 15 Images" onPress={openCameraMultiple} color="#007bff" />
-
-        {imageUris.length > 0 && (
-          <View style={styles.imageGallery}>
-            {imageUris.map((item, index) => (
-              <View key={index} style={styles.imageWrapper}>
-                <Image source={{ uri: item.uri }} style={styles.previewImage} />
-                <Text style={styles.imageLabel}>{item.name}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
+      ))}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+    padding: 20,
+    paddingBottom: 50,
   },
-  section: {
-    backgroundColor: '#fff',
-    margin: 10,
-    padding: 15,
-    borderRadius: 10,
-  },
-  sectionTitle: {
-    fontSize: 20,
+  title: {
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  pickerContainer: {
-    marginBottom: 15,
+    marginBottom: 10,
   },
   label: {
+    marginTop: 10,
     fontSize: 16,
-    marginBottom: 5,
   },
   picker: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 5,
+    height: 50,
+    width: '100%',
   },
-  loader: {
-    marginVertical: 20,
+  slider: {
+    width: '100%',
+    height: 40,
   },
   input: {
-    height: 40,
     borderColor: '#ccc',
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-  },
-  imageGallery: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 15,
-  },
-  imageWrapper: {
-    alignItems: 'center',
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  previewImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
-  },
-  imageLabel: {
-    fontSize: 12,
-    marginTop: 5,
-    textAlign: 'center',
+    padding: 10,
+    marginVertical: 10,
+    borderRadius: 8,
   },
 });
