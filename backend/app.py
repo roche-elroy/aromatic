@@ -310,4 +310,4 @@ async def cleanup_inactive_clients():
 async def startup_event():
     asyncio.create_task(cleanup_inactive_clients())
 
-@router.post("/process-images/")
+
