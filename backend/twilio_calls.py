@@ -13,7 +13,7 @@ router = APIRouter()
 # Twilio credentials from environment variables
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
+TWILIO_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
