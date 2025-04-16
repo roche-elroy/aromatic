@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { TranslationProvider, useTranslation } from './src/context/TranslationContext';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,9 +9,10 @@ import SettingsScreen from './src/components/settings/Settings';
 import EmergencyScreen from './src/components/emergency/Emergency';
 import LocationScreen from './src/components/location/Location';
 import ProfileScreen from './src/components/profile/Profile';
-import { useEffect, useState as useStateEffect } from 'react';
+import { useState as useStateEffect } from 'react';
 import "./src/lib/i18n";
 import { BiometricAuth } from './src/components/auth/BiometricAuth';
+import { speak } from './src/utils/speech';
 
 //comment the below line to show errors
 import { LogBox } from 'react-native';
@@ -29,6 +30,12 @@ function AppContent() {
     profile: 'Profile'
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Announce screen changes
+  const handleScreenChange = async (screenName: string) => {
+    const translatedText = await translateText(`${screenName} screen`);
+    await speak(translatedText, targetLanguage);
+  };
 
   useEffect(() => {
     const translateLabels = async () => {
@@ -86,6 +93,14 @@ function AppContent() {
           headerTintColor: '#fff',
           headerTitleStyle: styles.headerTitle,
         })}
+        screenListeners={{
+          focus: (e) => {
+            const routeName = e.target?.split('-')[0];
+            if (routeName) {
+              handleScreenChange(routeName);
+            }
+          }
+        }}
       >
         <Tab.Screen 
           name="Settings" 

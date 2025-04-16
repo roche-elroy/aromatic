@@ -45,6 +45,7 @@
     "react-i18next": "^15.4.1",
     "react-native": "0.76.9",
     "react-native-collapsible": "^1.6.2",
+    "react-native-gesture-handler": "~2.20.2",
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "~0.19.13",
     "tailwindcss": "^4.0.12"
