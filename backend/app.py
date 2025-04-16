@@ -86,28 +86,14 @@ async def process_frame_detection(frame):
         return None, "Invalid frame", None, None
     
     try:
-        results = model(frame)[0]
+        # Use tracker's update method which now handles both detection and tracking
+        tracked_objects = object_tracker.update(frame)
+        
         detected_objects = []
-        detections_for_tracker = []
-        
-        for box in results.boxes:
-            label = model.names[int(box.cls)]
-            confidence = float(box.conf)
-            x1, y1, x2, y2 = box.xyxy[0].tolist()
-            
-            detected_objects.append(label)
-            detections_for_tracker.append({
-                'bbox': [x1, y1, x2, y2],
-                'confidence': confidence,
-                'class_name': label
-            })
-        
-        # Update tracker
-        tracked_objects = object_tracker.update(frame, detections_for_tracker)
-        
-        # Format tracking results
         tracking_results = []
+        
         for obj in tracked_objects:
+            detected_objects.append(obj.class_name.split(' (')[0])  # Remove position suffix
             tracking_results.append({
                 'id': obj.track_id,
                 'class': obj.class_name,
@@ -117,7 +103,7 @@ async def process_frame_detection(frame):
         
         detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
         
-        # Return first bounding box for compatibility with existing code
+        # Get first bounding box for compatibility
         bounding_box = None
         if tracking_results:
             first_track = tracking_results[0]
@@ -129,7 +115,7 @@ async def process_frame_detection(frame):
                 "y2": y2
             }
         
-        return results, detection_text, bounding_box, tracking_results
+        return tracked_objects, detection_text, bounding_box, tracking_results
         
     except Exception as e:
         print(f"❌ Detection error: {str(e)}")
