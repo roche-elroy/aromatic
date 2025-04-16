@@ -77,15 +77,17 @@ const EmergencyScreen: React.FC = () => {
     translateUI();
   }, [targetLanguage, translateText]);
 
-  const makeEmergencyCall = async (phoneNumber: string) => {
+  const makeEmergencyCall = async (number: string) => {
     try {
-      await Linking.openURL(`tel:${phoneNumber}`);
+        const response = await axios.post(`http://${SERVER_IP}:8000/make-call`, {
+            to: number,
+        });
+        Alert.alert('Call Started', `Status: ${response.data.status}`);
     } catch (error) {
-      console.error('Call failed:', error);
-      Alert.alert('Call Failed', 'Unable to make the emergency call.');
+        console.error('Call failed:', error);
+        Alert.alert('Call Failed', 'Unable to place the call.');
     }
-  };
-
+};
   const sendEmergencyMessage = async (number: string, message: string) => {
     try {
       // First check if SMS is available
@@ -166,7 +168,8 @@ const EmergencyScreen: React.FC = () => {
             }
             if (contacts.length > 0) {
               await speakText(await translateText('Calling emergency contact now'));
-              makeEmergencyCall(contacts[0]);
+              const callPromises = contacts.map(contact => makeEmergencyCall(contact));
+              await Promise.all(callPromises)
             }
           },
           style: 'destructive',
@@ -177,11 +180,10 @@ const EmergencyScreen: React.FC = () => {
 
     // Set timeout for automatic call
     alertTimeoutRef.current = setTimeout(async () => {
-      if (contacts.length > 0) {
-        const noResponseMessage = await translateText('No response detected. Calling emergency contact.');
-        await speakText(noResponseMessage);
-        makeEmergencyCall(contacts[0]);
-      }
+      const noResponseMessage = await translateText('No response detected. Calling emergency contact.');
+      await speakText(noResponseMessage);
+      const callPromises = contacts.map(contact => makeEmergencyCall(contact));
+      await Promise.all(callPromises)
     }, 20000); // 20 seconds
   };
 
