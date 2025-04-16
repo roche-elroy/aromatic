@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert, TextInput, TouchableOpacity } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import Slider from '@react-native-community/slider';
@@ -19,6 +19,7 @@ export default function SettingsScreen() {
   });
   const [pitch, setPitch] = useState(1.0);
   const [rate, setRate] = useState(0.9);
+  const [processedNames, setProcessedNames] = useState<string[]>([]);
 
   // Initialize settings when component mounts
   useEffect(() => {
@@ -126,6 +127,15 @@ export default function SettingsScreen() {
       return;
     }
 
+    // Check if name already exists
+    if (processedNames.includes(personName.trim())) {
+      Alert.alert(
+        'Name Already Exists',
+        'This person\'s facial landmarks are already processed. Please use a different name.'
+      );
+      return;
+    }
+
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission required', 'Camera access is needed to take pictures.');
@@ -173,6 +183,15 @@ export default function SettingsScreen() {
     loadStoredImages();
   }, []);
 
+  // Add this useEffect to load processed names
+  useEffect(() => {
+    const loadProcessedNames = async () => {
+      const names = await ImageStorage.getProcessedNames();
+      setProcessedNames(names);
+    };
+    loadProcessedNames();
+  }, []);
+
   // Modify uploadImages to use stored images
   const uploadImages = async () => {
     const storedImages = await ImageStorage.getStoredImages();
@@ -192,7 +211,8 @@ export default function SettingsScreen() {
         } as any);
       });
 
-      const response = await fetch('http://192.168.185.1:8000/facemesh/process-images/', {
+      // Use environment variable for server IP
+      const response = await fetch(`http://${process.env.SERVER_IP}:8000/facemesh/process-images/`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -206,9 +226,19 @@ export default function SettingsScreen() {
       }
 
       const result = await response.json();
-      console.log('Face mesh processing complete:', result);
-      Alert.alert('Success', 'Images processed successfully. Check terminal for landmarks.');
       
+      // Store the name of the person whose images were just processed
+      if (personName) {
+        await ImageStorage.addProcessedName(personName.trim());
+        setProcessedNames(prev => [...new Set([...prev, personName.trim()])]);
+      }
+
+      console.log('Face mesh processing complete:', result);
+      Alert.alert(
+        'Processing Complete',
+        `Facial landmarks processed for: ${personName}`
+      );
+
       // Clear stored images after successful upload
       await ImageStorage.clearStoredImages();
       setImageUris([]);
@@ -219,6 +249,28 @@ export default function SettingsScreen() {
       Alert.alert('Error', 'Failed to process images. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+};
+
+  const handleDeleteLandmark = async (name: string) => {
+    try {
+      await ImageStorage.deleteProcessedName(name);
+      setProcessedNames(prev => prev.filter(n => n !== name));
+      Alert.alert('Success', `Landmarks for ${name} deleted successfully`);
+    } catch (error) {
+      console.error('Error deleting landmarks:', error);
+      Alert.alert('Error', 'Failed to delete landmarks');
+    }
+  };
+
+  const handleDeleteUnnamed = async () => {
+    try {
+      await ImageStorage.deleteUnnamedLandmarks();
+      setProcessedNames(prev => prev.filter(name => name && name.trim() !== ''));
+      Alert.alert('Success', 'Unnamed landmarks deleted successfully');
+    } catch (error) {
+      console.error('Error deleting unnamed landmarks:', error);
+      Alert.alert('Error', 'Failed to delete unnamed landmarks');
     }
   };
 
@@ -261,6 +313,38 @@ export default function SettingsScreen() {
         onValueChange={handleRateChange}
         style={styles.slider}
       />
+
+      <View style={styles.processedNamesContainer}>
+        <Text style={styles.sectionTitle}>Processed Facial Landmarks</Text>
+        {processedNames.length > 0 ? (
+          <>
+            <View style={styles.namesGrid}>
+              {processedNames.map((name, index) => (
+                <View key={index} style={styles.nameCard}>
+                  <View style={styles.nameHeader}>
+                    <Text style={styles.nameText}>{name || 'Unnamed'}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteLandmark(name)}
+                      style={styles.deleteButton}
+                    >
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.processedText}>Landmarks Stored</Text>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity
+              onPress={handleDeleteUnnamed}
+              style={styles.deleteUnnamedButton}
+            >
+              <Text style={styles.deleteUnnamedText}>Delete Unnamed Landmarks</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <Text style={styles.emptyText}>No facial landmarks processed yet</Text>
+        )}
+      </View>
 
       <TextInput
         placeholder="Enter person name"
@@ -311,5 +395,83 @@ const styles = StyleSheet.create({
     padding: 10,
     marginVertical: 10,
     borderRadius: 8,
+  },
+  processedNamesContainer: {
+    marginVertical: 20,
+    padding: 15,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  nameCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    marginVertical: 5,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  nameText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 4,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    padding: 15,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+  },
+  namesGrid: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+  processedText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontStyle: 'italic',
+  },
+  nameHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  deleteButton: {
+    backgroundColor: '#ff4444',
+    padding: 6,
+    borderRadius: 4,
+    marginLeft: 10,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  deleteUnnamedButton: {
+    backgroundColor: '#ff8888',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 15,
+    alignItems: 'center',
+  },
+  deleteUnnamedText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
