@@ -7,11 +7,18 @@ import { useTranslation } from '../../context/TranslationContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ImageStorage } from '../../utils/imageStorage';
 
+// Add this type definition at the top
+interface ImageVariation {
+  variation: string;
+  landmarks: any[];
+  image_data: string;
+}
+
 export default function SettingsScreen() {
   const { targetLanguage, setTargetLanguage, supportedLanguages, translateText } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [personName, setPersonName] = useState('');
-  const [imageUris, setImageUris] = useState<{ name: string; uri: string }[]>([]);
+  const [imageUris, setImageUris] = useState<{ name: string; uri: string; variations?: ImageVariation[] }[]>([]);
   const [translations, setTranslations] = useState({
     title: 'Translation Settings',
     label: 'Select Language:',
@@ -227,6 +234,17 @@ export default function SettingsScreen() {
 
       const result = await response.json();
       
+      // Update imageUris with variations
+      setImageUris(prev => prev.map(img => {
+        const resultData = result.results.find(r => 
+          r.filename.startsWith(img.name)
+        );
+        return {
+          ...img,
+          variations: resultData?.variations || []
+        };
+      }));
+
       // Store the name of the person whose images were just processed
       if (personName) {
         await ImageStorage.addProcessedName(personName.trim());
@@ -236,13 +254,15 @@ export default function SettingsScreen() {
       console.log('Face mesh processing complete:', result);
       Alert.alert(
         'Processing Complete',
-        `Facial landmarks processed for: ${personName}`
+        `Facial landmarks processed for: ${personName}\nCreated variations: original, grayscale, and 3 rotations`
       );
 
-      // Clear stored images after successful upload
-      await ImageStorage.clearStoredImages();
-      setImageUris([]);
-      setPersonName('');
+      // Don't clear images immediately so user can see variations
+      setTimeout(() => {
+        ImageStorage.clearStoredImages();
+        setImageUris([]);
+        setPersonName('');
+      }, 5000); // Clear after 5 seconds
 
     } catch (error) {
       console.error('Upload error:', error);
@@ -357,11 +377,24 @@ export default function SettingsScreen() {
       <Button title="Upload Images" onPress={uploadImages} />
 
       {imageUris.map((img, idx) => (
-        <Image
-          key={idx}
-          source={{ uri: img.uri }}
-          style={{ width: 100, height: 100, marginTop: 10 }}
-        />
+        <View key={idx} style={styles.imageVariationsContainer}>
+          <Text style={styles.variationTitle}>{img.name} - Image {idx + 1}</Text>
+          <ScrollView horizontal={true} style={styles.variationsScroll}>
+            <Image
+              source={{ uri: img.uri }}
+              style={styles.imageVariation}
+            />
+            {img.variations?.map((variation: ImageVariation, varIdx: number) => (
+              <View key={varIdx} style={styles.variationContainer}>
+                <Text style={styles.variationLabel}>{variation.variation}</Text>
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${variation.image_data}` }}
+                  style={styles.imageVariation}
+                />
+              </View>
+            ))}
+          </ScrollView>
+        </View>
       ))}
     </ScrollView>
   );
@@ -474,4 +507,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  imageVariationsContainer: {
+    marginVertical: 15,
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+  },
+  variationTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  variationsScroll: {
+    flexDirection: 'row',
+  },
+  variationContainer: {
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  imageVariation: {
+    width: 150,
+    height: 150,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  variationLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 5,
+  }
 });
