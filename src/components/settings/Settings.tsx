@@ -329,7 +329,7 @@ export default function SettingsScreen() {
         };
       }));
 
-      // Store the name
+      // Modify the success part in uploadImages function
       if (personName) {
         await ImageStorage.addProcessedName(personName.trim());
         setProcessedNames(prev => [...new Set([...prev, personName.trim()])]);
@@ -339,6 +339,13 @@ export default function SettingsScreen() {
         'Processing Complete',
         `Facial landmarks processed for: ${personName}`
       );
+
+      // Clear images after short delay
+      setTimeout(async () => {
+        await ImageStorage.clearStoredImages();
+        setImageUris([]);
+        setPersonName('');
+      }, 2000);
 
     } catch (error) {
       console.error('Upload error:', error);
@@ -379,14 +386,30 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteLandmark = async (name: string) => {
-    try {
-      await ImageStorage.deleteProcessedName(name);
-      setProcessedNames(prev => prev.filter(n => n !== name));
-      Alert.alert('Success', `Landmarks for ${name} deleted successfully`);
-    } catch (error) {
-      console.error('Error deleting landmarks:', error);
-      Alert.alert('Error', 'Failed to delete landmarks');
-    }
+    Alert.alert(
+      'Delete Landmarks',
+      `Are you sure you want to delete landmarks for ${name}?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await ImageStorage.deleteProcessedName(name);
+              setProcessedNames(prev => prev.filter(n => n !== name));
+              Alert.alert('Success', `Landmarks for ${name} deleted successfully`);
+            } catch (error) {
+              console.error('Error deleting landmarks:', error);
+              Alert.alert('Error', 'Failed to delete landmarks');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleDeleteUnnamed = async () => {
@@ -480,30 +503,22 @@ export default function SettingsScreen() {
       <View style={styles.processedNamesContainer}>
         <Text style={styles.sectionTitle}>Processed Facial Landmarks</Text>
         {processedNames.length > 0 ? (
-          <>
-            <View style={styles.namesGrid}>
-              {processedNames.map((name, index) => (
-                <View key={index} style={styles.nameCard}>
-                  <View style={styles.nameHeader}>
-                    <Text style={styles.nameText}>{name || 'Unnamed'}</Text>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteLandmark(name)}
-                      style={styles.deleteButton}
-                    >
-                      <Text style={styles.deleteButtonText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.processedText}>Landmarks Stored</Text>
+          <View style={styles.namesGrid}>
+            {processedNames.map((name, index) => (
+              <View key={index} style={styles.nameCard}>
+                <View style={styles.nameHeader}>
+                  <Text style={styles.nameText}>{name}</Text>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteLandmark(name)}
+                    style={styles.deleteButton}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
                 </View>
-              ))}
-            </View>
-            <TouchableOpacity
-              onPress={handleDeleteUnnamed}
-              style={styles.deleteUnnamedButton}
-            >
-              <Text style={styles.deleteUnnamedText}>Delete Unnamed Landmarks</Text>
-            </TouchableOpacity>
-          </>
+                <Text style={styles.processedText}>Landmarks Stored</Text>
+              </View>
+            ))}
+          </View>
         ) : (
           <Text style={styles.emptyText}>No facial landmarks processed yet</Text>
         )}
@@ -611,7 +626,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#2c3e50',
-    marginBottom: 4,
+  },
+  processedText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontStyle: 'italic',
+  },
+  deleteButton: {
+    backgroundColor: '#ff4444',
+    padding: 6,
+    borderRadius: 4,
+    marginLeft: 10,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   emptyText: {
     fontSize: 16,
@@ -626,27 +656,11 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 10,
   },
-  processedText: {
-    fontSize: 14,
-    color: '#4CAF50',
-    fontStyle: 'italic',
-  },
   nameHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
-  },
-  deleteButton: {
-    backgroundColor: '#ff4444',
-    padding: 6,
-    borderRadius: 4,
-    marginLeft: 10,
-  },
-  deleteButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   deleteUnnamedButton: {
     backgroundColor: '#ff8888',
