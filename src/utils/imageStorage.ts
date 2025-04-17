@@ -106,5 +106,26 @@ export const ImageStorage = {
       console.error('Error clearing stored images:', error);
       throw error;
     }
+  },
+
+  async storeLandmarks(name: string, landmarks: any[]): Promise<void> {
+    try {
+      const key = `landmarks_${name}`;
+      await AsyncStorage.setItem(key, JSON.stringify(landmarks));
+    } catch (error) {
+      console.error('Error storing landmarks:', error);
+      throw error;
+    }
+  },
+
+  async getLandmarks(name: string): Promise<any[]> {
+    try {
+      const key = `landmarks_${name}`;
+      const landmarks = await AsyncStorage.getItem(key);
+      return landmarks ? JSON.parse(landmarks) : [];
+    } catch (error) {
+      console.error('Error getting landmarks:', error);
+      return [];
+    }
   }
 };

@@ -14,6 +14,13 @@ interface ImageVariation {
   variation: string;
   landmarks: any[];
   image_data: string;
+  orb_results?: OrbResults;
+}
+
+interface OrbResults {
+  num_keypoints: number;
+  keypoints_image: string;
+  descriptors: number[][];
 }
 
 export default function SettingsScreen() {
@@ -22,7 +29,6 @@ export default function SettingsScreen() {
   const [personName, setPersonName] = useState('');
   const [imageUris, setImageUris] = useState<{ name: string; uri: string; variations?: ImageVariation[] }[]>([]);
   const [translations, setTranslations] = useState({
-    title: 'Translation Settings',
     label: 'Select Language:',
     languages: {} as Record<string, string>
   });
@@ -49,10 +55,10 @@ export default function SettingsScreen() {
     }
   }, [targetLanguage]);
 
-  const translateUIElements = async () => {
+  // Remove or modify the translateUIElements function
+const translateUIElements = async () => {
     if (targetLanguage === 'en') {
       setTranslations({
-        title: 'Translation Settings',
         label: 'Select Language:',
         languages: {}
       });
@@ -61,10 +67,7 @@ export default function SettingsScreen() {
 
     setIsLoading(true);
     try {
-      const [translatedTitle, translatedLabel] = await Promise.all([ 
-        translateText('Translation Settings'),
-        translateText('Select Language:')
-      ]);
+      const translatedLabel = await translateText('Select Language:');
 
       const translatedLanguages: Record<string, string> = {};
       const chunkSize = 5;
@@ -79,7 +82,6 @@ export default function SettingsScreen() {
       }
 
       setTranslations({
-        title: translatedTitle,
         label: translatedLabel,
         languages: translatedLanguages
       });
@@ -88,7 +90,7 @@ export default function SettingsScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+};
 
   // Load saved speech settings from AsyncStorage
   const loadSpeechSettings = async () => {
@@ -271,31 +273,44 @@ export default function SettingsScreen() {
 
   // Replace the uploadImages function
   const uploadImages = async () => {
-    if (!(await checkConnection())) {
+    if (!personName.trim()) {
+      Alert.alert('Missing Name', 'Please enter a person name before uploading images.');
       return;
     }
-
+  
     const storedImages = await ImageStorage.getStoredImages();
     if (storedImages.length === 0) {
       Alert.alert('No Images', 'Please capture images first.');
       return;
     }
-
+  
     setIsLoading(true);
     try {
+      // Log the stored images for debugging
+      console.log('Stored images:', storedImages);
+  
       const formData = new FormData();
       storedImages.forEach((img, idx) => {
+        // Ensure proper file name and type
         formData.append('images', {
           uri: img.uri,
           type: 'image/jpeg',
-          name: `${personName.trim()}_${idx}.jpg`,
+          name: `${personName.trim() || 'unnamed'}_${idx}.jpg`,
         } as any);
+  
+        // Log each image being added to formData
+        console.log(`Adding image ${idx} to formData:`, img.uri);
       });
-
-      // Get server IP from environment or use fallback
+  
       const SERVER_IP = process.env.SERVER_IP || '192.168.1.108';
-      console.log('Attempting to connect to:', SERVER_IP); // Debug log
-
+      console.log('Attempting to connect to:', SERVER_IP);
+  
+      // First verify server connection
+      const isConnected = await checkServerConnection(SERVER_IP);
+      if (!isConnected) {
+        throw new Error('Server connection failed');
+      }
+  
       const response = await fetch(`http://${SERVER_IP}:8000/facemesh/process-images/`, {
         method: 'POST',
         body: formData,
@@ -303,21 +318,19 @@ export default function SettingsScreen() {
           'Accept': 'application/json',
           'Content-Type': 'multipart/form-data',
         },
-        // Add timeout and connection settings
-        timeout: 30000, // 30 seconds timeout
       });
-
+  
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+  
       const result = await response.json();
-      console.log('Server response:', result); // Debug log
-
+      console.log('Server response:', result);
+  
       if (result.error) {
         throw new Error(result.error);
       }
-
+  
       // Update imageUris with variations
       setImageUris(prev => prev.map(img => {
         const resultData = result.results.find(r => 
@@ -328,25 +341,18 @@ export default function SettingsScreen() {
           variations: resultData?.variations || []
         };
       }));
-
-      // Modify the success part in uploadImages function
+  
+      // Store the name
       if (personName) {
         await ImageStorage.addProcessedName(personName.trim());
         setProcessedNames(prev => [...new Set([...prev, personName.trim()])]);
       }
-
+  
       Alert.alert(
         'Processing Complete',
         `Facial landmarks processed for: ${personName}`
       );
-
-      // Clear images after short delay
-      setTimeout(async () => {
-        await ImageStorage.clearStoredImages();
-        setImageUris([]);
-        setPersonName('');
-      }, 2000);
-
+  
     } catch (error) {
       console.error('Upload error:', error);
       Alert.alert(
@@ -354,7 +360,8 @@ export default function SettingsScreen() {
         'Failed to process images. Please check:\n\n' +
         '1. Server is running\n' +
         '2. Device is connected to network\n' +
-        '3. Server IP is correct'
+        '3. Server IP is correct\n\n' +
+        `Error: ${error.message}`
       );
     } finally {
       setIsLoading(false);
@@ -460,6 +467,96 @@ export default function SettingsScreen() {
     };
   }, [connectWebSocket]);
 
+  // Add this function after other handlers
+  const handleUseLandmarks = async (name: string) => {
+    try {
+        setIsLoading(true);
+        
+        const storedImages = await ImageStorage.getStoredImages();
+        if (storedImages.length === 0) {
+            Alert.alert('No Images', 'Please capture images first before using landmarks.');
+            return;
+        }
+
+        const landmarks = await ImageStorage.getLandmarks(name);
+        if (!landmarks || landmarks.length === 0) {
+            Alert.alert('Error', 'No landmarks found for this person.');
+            return;
+        }
+
+        console.log(`Using ${landmarks.length} landmarks for ${name}`);
+
+        const formData = new FormData();
+        storedImages.forEach((img, idx) => {
+            formData.append('images', {
+                uri: img.uri,
+                type: 'image/jpeg',
+                name: `${name}_${idx}.jpg`,
+            } as any);
+        });
+
+        const SERVER_IP = process.env.SERVER_IP || '192.168.1.108';
+        console.log('Sending request to:', `http://${SERVER_IP}:8000/orb/process-orb/`);
+
+        // First verify server connection
+        const isConnected = await checkServerConnection(SERVER_IP);
+        if (!isConnected) {
+            throw new Error('Server connection failed');
+        }
+
+        const orbResponse = await fetch(`http://${SERVER_IP}:8000/orb/process-orb/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'multipart/form-data',
+                'X-Landmarks': JSON.stringify(landmarks)
+            },
+        });
+
+        if (!orbResponse.ok) {
+            throw new Error(`Server error: ${orbResponse.status}`);
+        }
+
+        const orbResult = await orbResponse.json();
+        
+        if (orbResult.error) {
+            throw new Error(orbResult.error);
+        }
+
+        if (!orbResult.results || orbResult.results.length === 0) {
+            throw new Error('No results returned from server');
+        }
+
+        // Update images with ORB results
+        setImageUris(prev => prev.map(img => ({
+            ...img,
+            variations: [{
+                variation: 'ORB with stored landmarks',
+                landmarks: landmarks,
+                image_data: orbResult.results[0].orb_results.keypoints_image,
+                orb_results: orbResult.results[0].orb_results
+            }]
+        })));
+
+        Alert.alert(
+            'Success', 
+            `Processed ${orbResult.results[0].orb_results.num_keypoints} keypoints\n` +
+            `using ${landmarks.length} landmarks from ${name}`
+        );
+
+    } catch (error) {
+        console.error('Error using landmarks:', error);
+        Alert.alert(
+            'Processing Error', 
+            `Failed to process images: ${error.message}\n\n` +
+            'Check the terminal for more details.'
+        );
+    } finally {
+        setIsLoading(false);
+    }
+};
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {isLoading && <ActivityIndicator size="large" />}
@@ -501,7 +598,7 @@ export default function SettingsScreen() {
       />
 
       <View style={styles.processedNamesContainer}>
-        <Text style={styles.sectionTitle}>Processed Facial Landmarks</Text>
+        <Text style={styles.sectionTitle}>Person List</Text>
         {processedNames.length > 0 ? (
           <View style={styles.namesGrid}>
             {processedNames.map((name, index) => (
@@ -515,12 +612,11 @@ export default function SettingsScreen() {
                     <Text style={styles.deleteButtonText}>Delete</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.processedText}>Landmarks Stored</Text>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No facial landmarks processed yet</Text>
+          <Text style={styles.emptyText}>No persons added yet</Text>
         )}
       </View>
 
@@ -546,7 +642,12 @@ export default function SettingsScreen() {
 
       {imageUris.map((img, idx) => (
         <View key={idx} style={styles.imageVariationsContainer}>
-          <Text style={styles.variationTitle}>{img.name} - Image {idx + 1}</Text>
+          <Text style={styles.variationTitle}>
+            {img.name} - Image {idx + 1}
+            {img.variations?.[0]?.orb_results && 
+              ` (${img.variations[0].orb_results.num_keypoints} keypoints)`
+            }
+          </Text>
           <ScrollView horizontal={true} style={styles.variationsScroll}>
             <Image
               source={{ uri: img.uri }}
@@ -554,7 +655,12 @@ export default function SettingsScreen() {
             />
             {img.variations?.map((variation: ImageVariation, varIdx: number) => (
               <View key={varIdx} style={styles.variationContainer}>
-                <Text style={styles.variationLabel}>{variation.variation}</Text>
+                <Text style={styles.variationLabel}>
+                  {variation.variation}
+                  {variation.orb_results && 
+                    ` (${variation.orb_results.num_keypoints} keypoints)`
+                  }
+                </Text>
                 <Image
                   source={{ uri: `data:image/jpeg;base64,${variation.image_data}` }}
                   style={styles.imageVariation}
@@ -620,23 +726,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
+    borderLeftColor: '#2196F3', // Changed to blue to remove the "landmark" association
   },
   nameText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#2c3e50',
   },
-  processedText: {
-    fontSize: 14,
-    color: '#4CAF50',
-    fontStyle: 'italic',
-  },
   deleteButton: {
     backgroundColor: '#ff4444',
-    padding: 6,
+    padding: 8,
     borderRadius: 4,
-    marginLeft: 10,
   },
   deleteButtonText: {
     color: 'white',
@@ -707,5 +807,9 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginVertical: 10,
     gap: 10,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
 });

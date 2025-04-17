@@ -1,122 +1,104 @@
-# facemesh.py
-
 from fastapi import APIRouter, File, UploadFile
 from typing import List
 import cv2
 import numpy as np
 import mediapipe as mp
-import base64
-from concurrent.futures import ThreadPoolExecutor
 
 router = APIRouter()
 mp_drawing = mp.solutions.drawing_utils
 mp_face_mesh = mp.solutions.face_mesh
 
-def rotate_image(image, angle):
-    if angle == 0: return image
-    height, width = image.shape[:2]
-    center = (width // 2, height // 2)
-    matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-    return cv2.warpAffine(image, matrix, (width, height))
+def process_image_variations(image, person_name):
+    print(f"\n{'='*50}")
+    print(f"Processing image for: {person_name}")
+    print(f"{'='*50}")
 
-def process_variation(image, variation_name, person_name):
-    try:
-        with mp_face_mesh.FaceMesh(
-            static_image_mode=True,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5
-        ) as face_mesh:
-            
-            # Convert to RGB for MediaPipe
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            results = face_mesh.process(rgb_image)
+    with mp_face_mesh.FaceMesh(
+        static_image_mode=True,
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=0.5
+    ) as face_mesh:
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(image_rgb)
+        
+        if not results.multi_face_landmarks:
+            print("No face detected in the image.")
+            return None
+
+        variations = []
+        h, w = image.shape[:2]
+        
+        for face_landmarks in results.multi_face_landmarks:
             landmarks = []
+            print("\nFacial Landmarks:")
+            print("-" * 30)
+            for idx, lm in enumerate(face_landmarks.landmark):
+                x, y, z = int(lm.x * w), int(lm.y * h), lm.z
+                landmarks.append({"id": idx, "x": lm.x, "y": lm.y, "z": lm.z})
+                print(f"Landmark {idx:03d}: x={x:4d}, y={y:4d}, z={z:.3f}")
 
-            print(f"\n{'='*50}")
-            print(f"Processing {person_name}'s {variation_name} image")
-            print(f"{'='*50}")
+            variants = [
+                ("original", image),
+                ("grayscale", cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)),
+                ("rotation_90", cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)),
+                ("rotation_180", cv2.rotate(image, cv2.ROTATE_180)),
+                ("rotation_270", cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE))
+            ]
 
-            if results.multi_face_landmarks:
-                for face_landmarks in results.multi_face_landmarks:
-                    print(f"\nFacial Landmarks for {variation_name}:")
-                    print("-" * 30)
-                    for idx, lm in enumerate(face_landmarks.landmark):
-                        landmarks.append({
-                            "id": idx,
-                            "x": lm.x,
-                            "y": lm.y,
-                            "z": lm.z
-                        })
-                        print(f"Landmark {idx:03d}: x={lm.x:.3f}, y={lm.y:.3f}, z={lm.z:.3f}")
-            else:
-                print(f"No face detected in {variation_name}")
+            orb = cv2.ORB_create(nfeatures=1000)
+            
+            for variant_name, variant_image in variants:
+                print(f"\n{'-'*30}")
+                print(f"Processing {variant_name} variation")
+                print(f"{'-'*30}")
+                
+                if len(variant_image.shape) == 3:
+                    gray = cv2.cvtColor(variant_image, cv2.COLOR_BGR2GRAY)
+                else:
+                    gray = variant_image
 
-            # Convert processed image to base64
-            _, buffer = cv2.imencode('.jpg', image)
-            base64_image = base64.b64encode(buffer).decode('utf-8')
+                keypoints, descriptors = orb.detectAndCompute(gray, None)
+                print(f"ORB Keypoints detected: {len(keypoints)}")
+                
+                for i, kp in enumerate(keypoints[:5]):
+                    print(f"Keypoint {i}: x={int(kp.pt[0]):4d}, y={int(kp.pt[1]):4d}, size={kp.size:.1f}, angle={kp.angle:.1f}")
+                
+                variations.append({
+                    "variation": variant_name,
+                    "landmarks": landmarks,
+                    "orb_results": {
+                        "num_keypoints": len(keypoints),
+                        "keypoints": [{"x": kp.pt[0], "y": kp.pt[1]} for kp in keypoints]
+                    }
+                })
 
-            return {
-                "variation": variation_name,
-                "landmarks": landmarks,
-                "image_data": base64_image
-            }
-    except Exception as e:
-        print(f"Error processing {variation_name}: {str(e)}")
-        return None
+        return variations
 
 @router.post("/process-images/")
 async def process_images(images: List[UploadFile] = File(...)):
     results_data = []
-
+    
     for image_file in images:
         try:
-            # Extract person name from filename
             person_name = image_file.filename.split('_')[0]
-            print(f"\nProcessing images for: {person_name}")
-
-            # Read image
-            image_bytes = await image_file.read()
-            np_image = np.frombuffer(image_bytes, np.uint8)
-            original = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
-
-            if original is None:
+            contents = await image_file.read()
+            nparr = np.frombuffer(contents, np.uint8)
+            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            if image is None:
                 print(f"Failed to decode image: {image_file.filename}")
                 continue
-
-            # Create variations
-            variations = []
+                
+            variations = process_image_variations(image, person_name)
+            if variations:
+                results_data.append({
+                    "filename": image_file.filename,
+                    "variations": variations
+                })
             
-            # Original
-            variations.append((original, "original"))
-            
-            # Grayscale
-            gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
-            gray_bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-            variations.append((gray_bgr, "grayscale"))
-            
-            # Rotations
-            for angle in [90, 180, 270]:
-                rotated = rotate_image(original, angle)
-                variations.append((rotated, f"rotation_{angle}"))
-
-            # Process each variation
-            variation_results = []
-            for img, variation_name in variations:
-                result = process_variation(img, variation_name, person_name)
-                if result:
-                    variation_results.append(result)
-
-            results_data.append({
-                "filename": image_file.filename,
-                "variations": variation_results
-            })
-
         except Exception as e:
             print(f"Error processing image {image_file.filename}: {str(e)}")
             continue
-
-    if not results_data:
-        return {"error": "Failed to process any images"}
-
+            
     return {"results": results_data}
