@@ -93,11 +93,31 @@ async def process_frame_detection(frame):
         detected_objects = []
         bounding_box = None
         
+        # Create a copy of frame for drawing
+        annotated_frame = frame.copy()
+        
         for box in results.boxes:
             label = model.names[int(box.cls)]
             detected_objects.append(label)
+            
+            # Get coordinates and draw bounding box
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            
+            # Draw rectangle
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            
+            # Add label
+            cv2.putText(
+                annotated_frame, 
+                label, 
+                (x1, y1 - 10), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.9, 
+                (0, 255, 0), 
+                2
+            )
+            
             if bounding_box is None:  # Track the first detected object
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
                 bounding_box = {
                     "x1": x1,
                     "y1": y1,
@@ -105,11 +125,15 @@ async def process_frame_detection(frame):
                     "y2": y2
                 }
         
+        # Convert frame to base64 for sending
+        _, buffer = cv2.imencode('.jpg', annotated_frame)
+        frame_base64 = base64.b64encode(buffer).decode('utf-8')
+        
         detection_text = ", ".join(set(detected_objects)) if detected_objects else "No objects detected"
-        return results, detection_text, bounding_box
+        return results, detection_text, bounding_box, frame_base64
     except Exception as e:
         print(f"❌ Detection error: {str(e)}")
-        return None, "Detection error", None
+        return None, "Detection error", None, None
 
 async def process_frame_depth(frame):
     if frame is None:
@@ -219,7 +243,7 @@ async def video_stream(websocket: WebSocket):
                     detection_task = asyncio.create_task(process_frame_detection(frame))
                     depth_task = asyncio.create_task(process_frame_depth(frame))
                     
-                    results, detection_text, bounding_box = await detection_task
+                    results, detection_text, bounding_box, annotated_frame = await detection_task
                     depth_result = await depth_task
 
                     if results is not None and active_clients[client_id].is_active:
@@ -237,6 +261,7 @@ async def video_stream(websocket: WebSocket):
                                 "method": depth_result.get("method", "none"),
                                 "translated_text": translated_text,
                                 "bounding_box": bounding_box,
+                                "annotated_frame": annotated_frame,  # Add this line
                                 "status": "success"
                             })
                 except Exception as e:
