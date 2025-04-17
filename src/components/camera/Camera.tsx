@@ -15,6 +15,23 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import { styles } from "./CameraStyles";
 
+// Add these interfaces after the imports
+interface ServerResponse {
+  translated_text: string;
+  depth?: number;
+  bounding_box?: BoundingBoxData;
+  annotated_frame?: string;
+  status: string;
+}
+
+interface BoundingBoxData {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  label?: string;
+}
+
 export default function CameraScreen() {  
   const [permission, requestPermission] = useCameraPermissions();
   const { targetLanguage, translateText } = useTranslation();
@@ -176,19 +193,32 @@ export default function CameraScreen() {
       setIsConnected(false);
     };
 
+    // Replace the existing ws.onmessage handler
     ws.onmessage = (event) => {
       try {
-        const result = JSON.parse(event.data);
+        const result: ServerResponse = JSON.parse(event.data);
         console.log("📥 Received server response:", result);
         
         if (result.bounding_box) {
-          setBoundingBox(result.bounding_box);
+          setBoundingBox({
+            ...result.bounding_box,
+            screenWidth,
+            screenHeight
+          });
           const quadrant = getQuadrant(result.bounding_box, screenWidth);
           setActiveQuadrant(quadrant);
+          
+          // Speak object location if detected
+          if (result.bounding_box.label) {
+            const locationDesc = getQuadrantDescription(quadrant, targetLanguage);
+            speakText(`${result.bounding_box.label} ${locationDesc}`);
+          }
         }
+
         if (result.translated_text) {
           setDetectionResult(result.translated_text);
         }
+
         if (result.depth !== undefined) {
           setDepthValue(result.depth);
           const isClose = result.depth < PROXIMITY_THRESHOLD;

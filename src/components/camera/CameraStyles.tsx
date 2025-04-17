@@ -118,4 +118,16 @@ export const styles = StyleSheet.create({
       zIndex: 999, // Add this
       elevation: 999, // Add this for Android
     },
+    boundingBox: {
+      position: 'absolute',
+      borderWidth: 2,
+      borderColor: '#00ff00',
+    },
+    objectLabel: {
+      position: 'absolute',
+      backgroundColor: '#00ff00',
+      color: 'white',
+      padding: 2,
+      fontSize: 12,
+    }
   });
