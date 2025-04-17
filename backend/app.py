@@ -47,10 +47,11 @@ app.include_router(facemesh_router, prefix="/facemesh")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_origin_regex="http://.*",  # Allow all HTTP origins
 )
 
 class TranslationRequest(BaseModel):
@@ -280,6 +281,13 @@ async def get_depth_value():
 @app.get("/")
 async def root():
     return {"status": "running", "connections": len(active_clients)}
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat()
+    }
 
 # Add cleanup task
 async def cleanup_inactive_clients():

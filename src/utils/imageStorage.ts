@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 
-interface StoredImage {
+export interface StoredImage {
   name: string;
   uri: string;
   timestamp: number;
@@ -10,25 +10,19 @@ interface StoredImage {
 export const ImageStorage = {
   async saveImage(personName: string, uri: string): Promise<void> {
     try {
-      // Create a permanent copy in app's document directory
       const fileName = `${Date.now()}_${personName}.jpg`;
       const newPath = `${FileSystem.documentDirectory}images/${fileName}`;
       
-      // Ensure directory exists
       await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}images/`, {
         intermediates: true
       });
       
-      // Copy image to permanent storage
       await FileSystem.copyAsync({
         from: uri,
         to: newPath
       });
 
-      // Get existing stored images
       const existingImages = await this.getStoredImages();
-      
-      // Add new image to storage
       const newImage: StoredImage = {
         name: personName,
         uri: newPath,
@@ -55,17 +49,6 @@ export const ImageStorage = {
     }
   },
 
-  async clearStoredImages(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem('storedImages');
-      // Also remove files from filesystem
-      await FileSystem.deleteAsync(`${FileSystem.documentDirectory}images/`, { idempotent: true });
-    } catch (error) {
-      console.error('Error clearing stored images:', error);
-      throw error;
-    }
-  },
-
   async getProcessedNames(): Promise<string[]> {
     try {
       const names = await AsyncStorage.getItem('processedNames');
@@ -87,6 +70,7 @@ export const ImageStorage = {
       }
     } catch (error) {
       console.error('Error adding processed name:', error);
+      throw error;
     }
   },
 
@@ -108,6 +92,18 @@ export const ImageStorage = {
       await AsyncStorage.setItem('processedNames', JSON.stringify(filteredNames));
     } catch (error) {
       console.error('Error deleting unnamed landmarks:', error);
+      throw error;
+    }
+  },
+
+  async clearStoredImages(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem('storedImages');
+      await FileSystem.deleteAsync(`${FileSystem.documentDirectory}images/`, { 
+        idempotent: true 
+      });
+    } catch (error) {
+      console.error('Error clearing stored images:', error);
       throw error;
     }
   }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button, Image, Alert, TextInput, TouchableOpacity } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -6,6 +6,8 @@ import Slider from '@react-native-community/slider';
 import { useTranslation } from '../../context/TranslationContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ImageStorage } from '../../utils/imageStorage';
+import Constants from 'expo-constants';
+import { checkServerConnection } from '../../utils/networkUtils';
 
 // Add this type definition at the top
 interface ImageVariation {
@@ -27,6 +29,10 @@ export default function SettingsScreen() {
   const [pitch, setPitch] = useState(1.0);
   const [rate, setRate] = useState(0.9);
   const [processedNames, setProcessedNames] = useState<string[]>([]);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  // Add this after the existing state declarations
+  const MAX_IMAGES = 7;
 
   // Initialize settings when component mounts
   useEffect(() => {
@@ -128,12 +134,13 @@ export default function SettingsScreen() {
     return translations.languages[lang.code] || lang.name;
   };
 
+  // Modify the openCameraMultiple function
   const openCameraMultiple = async () => {
     if (!personName.trim()) {
       Alert.alert('Missing Name', 'Please enter a name before capturing images.');
       return;
     }
-
+  
     // Check if name already exists
     if (processedNames.includes(personName.trim())) {
       Alert.alert(
@@ -142,34 +149,78 @@ export default function SettingsScreen() {
       );
       return;
     }
-
+  
+    // Check for existing images
+    const storedImages = await ImageStorage.getStoredImages();
+    if (storedImages.length > 0) {
+      Alert.alert(
+        'Existing Images',
+        'There are already captured images. What would you like to do?',
+        [
+          {
+            text: 'Upload Existing',
+            onPress: () => uploadImages()
+          },
+          {
+            text: 'Delete & Capture New',
+            onPress: async () => {
+              await ImageStorage.clearStoredImages();
+              setImageUris([]);
+              captureNewImages();
+            }
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          }
+        ]
+      );
+      return;
+    }
+  
+    await captureNewImages();
+  };
+  
+  // Add this new function for capturing images
+  const captureNewImages = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission required', 'Camera access is needed to take pictures.');
       return;
     }
-
+  
     try {
       const capturedImages: { name: string; uri: string }[] = [];
       let captured = 0;
-
-      while (captured < 7) {
+  
+      while (captured < MAX_IMAGES) {
         const result = await ImagePicker.launchCameraAsync({
           quality: 0.7,
         });
-
+  
         if (result.canceled || result.assets.length === 0) break;
-
+  
         const newUri = result.assets[0].uri;
-        // Save image to permanent storage
         await ImageStorage.saveImage(personName.trim(), newUri);
         
         capturedImages.push({ name: personName.trim(), uri: newUri });
         setImageUris((prev) => [...prev, { name: personName.trim(), uri: newUri }]);
         captured++;
+  
+        // Show remaining images count
+        if (captured < MAX_IMAGES) {
+          Alert.alert(
+            'Image Captured',
+            `${captured} images captured. ${MAX_IMAGES - captured} remaining.`
+          );
+        }
       }
-
-      Alert.alert('Capture Complete', `${captured} images captured for ${personName.trim()}`);
+  
+      if (captured === MAX_IMAGES) {
+        Alert.alert('Maximum Reached', `${MAX_IMAGES} images captured successfully for ${personName.trim()}`);
+      } else {
+        Alert.alert('Capture Complete', `${captured} images captured for ${personName.trim()}`);
+      }
     } catch (error) {
       console.error('Error capturing images:', error);
       Alert.alert('Error', 'Failed to save images. Please try again.');
@@ -199,8 +250,31 @@ export default function SettingsScreen() {
     loadProcessedNames();
   }, []);
 
-  // Modify uploadImages to use stored images
+  // Add this function
+  const checkConnection = async () => {
+    const SERVER_IP = process.env.SERVER_IP || '192.168.1.108';
+    const isConnected = await checkServerConnection(SERVER_IP);
+    
+    if (!isConnected) {
+      Alert.alert(
+        'Connection Error',
+        'Cannot connect to server. Please check:\n\n' +
+        '1. Server is running\n' +
+        '2. Device is connected to network\n' +
+        '3. Server IP is correct\n\n' +
+        `Current server IP: ${SERVER_IP}`
+      );
+      return false;
+    }
+    return true;
+  };
+
+  // Replace the uploadImages function
   const uploadImages = async () => {
+    if (!(await checkConnection())) {
+      return;
+    }
+
     const storedImages = await ImageStorage.getStoredImages();
     if (storedImages.length === 0) {
       Alert.alert('No Images', 'Please capture images first.');
@@ -214,18 +288,23 @@ export default function SettingsScreen() {
         formData.append('images', {
           uri: img.uri,
           type: 'image/jpeg',
-          name: `${img.name}_${idx}.jpg`,
+          name: `${personName.trim()}_${idx}.jpg`,
         } as any);
       });
 
-      // Use environment variable for server IP
-      const response = await fetch(`http://${process.env.SERVER_IP}:8000/facemesh/process-images/`, {
+      // Get server IP from environment or use fallback
+      const SERVER_IP = process.env.SERVER_IP || '192.168.1.108';
+      console.log('Attempting to connect to:', SERVER_IP); // Debug log
+
+      const response = await fetch(`http://${SERVER_IP}:8000/facemesh/process-images/`, {
         method: 'POST',
         body: formData,
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'multipart/form-data',
         },
+        // Add timeout and connection settings
+        timeout: 30000, // 30 seconds timeout
       });
 
       if (!response.ok) {
@@ -233,7 +312,12 @@ export default function SettingsScreen() {
       }
 
       const result = await response.json();
-      
+      console.log('Server response:', result); // Debug log
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
       // Update imageUris with variations
       setImageUris(prev => prev.map(img => {
         const resultData = result.results.find(r => 
@@ -245,32 +329,54 @@ export default function SettingsScreen() {
         };
       }));
 
-      // Store the name of the person whose images were just processed
+      // Store the name
       if (personName) {
         await ImageStorage.addProcessedName(personName.trim());
         setProcessedNames(prev => [...new Set([...prev, personName.trim()])]);
       }
 
-      console.log('Face mesh processing complete:', result);
       Alert.alert(
         'Processing Complete',
-        `Facial landmarks processed for: ${personName}\nCreated variations: original, grayscale, and 3 rotations`
+        `Facial landmarks processed for: ${personName}`
       );
-
-      // Don't clear images immediately so user can see variations
-      setTimeout(() => {
-        ImageStorage.clearStoredImages();
-        setImageUris([]);
-        setPersonName('');
-      }, 5000); // Clear after 5 seconds
 
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Error', 'Failed to process images. Please try again.');
+      Alert.alert(
+        'Network Error', 
+        'Failed to process images. Please check:\n\n' +
+        '1. Server is running\n' +
+        '2. Device is connected to network\n' +
+        '3. Server IP is correct'
+      );
     } finally {
       setIsLoading(false);
     }
-};
+  };
+
+  // Add a new function to handle image deletion
+  const handleDeleteImages = async () => {
+    Alert.alert(
+      'Delete Images',
+      'Are you sure you want to delete all captured images?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await ImageStorage.clearStoredImages();
+            setImageUris([]);
+            setPersonName('');
+            Alert.alert('Success', 'All captured images have been deleted');
+          }
+        }
+      ]
+    );
+  };
 
   const handleDeleteLandmark = async (name: string) => {
     try {
@@ -293,6 +399,43 @@ export default function SettingsScreen() {
       Alert.alert('Error', 'Failed to delete unnamed landmarks');
     }
   };
+
+  const connectWebSocket = useCallback(() => {
+    try {
+      const ws = new WebSocket(`ws://${process.env.SERVER_IP}:8000/ws/video?target=${targetLanguage}`);
+      
+      ws.onopen = () => {
+        console.log('WebSocket Connected');
+        setWsConnected(true);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        setWsConnected(false);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket Closed');
+        setWsConnected(false);
+        // Attempt to reconnect after 5 seconds
+        setTimeout(connectWebSocket, 5000);
+      };
+
+      return ws;
+    } catch (error) {
+      console.error('WebSocket Connection Error:', error);
+      return null;
+    }
+  }, [targetLanguage]);
+
+  useEffect(() => {
+    const ws = connectWebSocket();
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [connectWebSocket]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -373,8 +516,18 @@ export default function SettingsScreen() {
         style={styles.input}
       />
 
-      <Button title="Capture 7 Images" onPress={openCameraMultiple} />
-      <Button title="Upload Images" onPress={uploadImages} />
+      <View style={styles.buttonContainer}>
+        <Button title="Capture 7 Images" onPress={openCameraMultiple} />
+        <Button title="Upload Images" onPress={uploadImages} />
+        {imageUris.length > 0 && (
+          <TouchableOpacity 
+            onPress={handleDeleteImages}
+            style={styles.deleteButton}
+          >
+            <Text style={styles.deleteButtonText}>Delete All Images</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {imageUris.map((img, idx) => (
         <View key={idx} style={styles.imageVariationsContainer}>
@@ -536,5 +689,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginBottom: 5,
-  }
+  },
+  buttonContainer: {
+    marginVertical: 10,
+    gap: 10,
+  },
 });
